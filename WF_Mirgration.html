@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Migration Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://appai.quickappflow.com/Attachment/downloadfile?fileUrl=Pages1%2Fstyles_c95d6382-e331-4f40-8983-4153ba5fc889.css">
+</head>
+<body>
+
+    <!-- ============================================= -->
+    <!-- HEADER + STEP TRACK                            -->
+    <!-- ============================================= -->
+    <header class="app-header">
+        <div class="header-title">
+            <div class="app-mark" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 7h13M17 7l-3.5-3.5M17 7l-3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M20 17H7M7 17l3.5-3.5M7 17l3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div>
+                <h1>Workflow Migration Tool</h1>
+                <p class="subtitle">Copy a workflow configuration from one workflow to another.</p>
+            </div>
+        </div>
+
+        <ol class="step-track" id="stepTrack">
+            <li class="step-node" data-step="1">
+                <span class="step-num">1</span>
+                <span class="step-label">Choose Source</span>
+            </li>
+            <li class="step-connector"></li>
+            <li class="step-node" data-step="2">
+                <span class="step-num">2</span>
+                <span class="step-label">Preview</span>
+            </li>
+            <li class="step-connector"></li>
+            <li class="step-node" data-step="3">
+                <span class="step-num">3</span>
+                <span class="step-label">Choose Target</span>
+            </li>
+            <li class="step-connector"></li>
+            <li class="step-node" data-step="4">
+                <span class="step-num">4</span>
+                <span class="step-label">Import</span>
+            </li>
+        </ol>
+    </header>
+
+    <!-- ============================================= -->
+    <!-- WORKSPACE                                      -->
+    <!-- ============================================= -->
+    <main class="workspace">
+
+        <!-- LEFT: SOURCE WORKFLOW -->
+        <section class="panel panel-source" aria-labelledby="sourceHeading">
+            <div class="panel-head">
+                <h2 id="sourceHeading">Source Workflow</h2>
+                <button id="refreshBtn" class="btn btn-ghost" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M4.5 15a8 8 0 0 0 14.6 2.3M19.5 9a8 8 0 0 0-14.6-2.3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+
+            <div class="search-wrap search-wrap-row">
+                <input
+                    type="text"
+                    id="sourceSearchInput"
+                    class="search-input"
+                    placeholder="Search by internal name (WFName)..."
+                    autocomplete="off"
+                />
+                <button id="sourceSearchBtn" class="btn btn-secondary" type="button">Search</button>
+            </div>
+
+            <div class="source-file-actions">
+                <button id="viewSourceJsonBtn" class="btn btn-ghost btn-block" type="button" disabled>View JSON</button>
+                <button id="downloadSourceJsonBtn" class="btn btn-ghost btn-block" type="button" disabled>Download JSON</button>
+                <label class="btn btn-ghost btn-block upload-json-label" for="uploadSourceJsonInput">
+                    Upload JSON
+                    <input type="file" id="uploadSourceJsonInput" accept="application/json,.json" class="visually-hidden" />
+                </label>
+            </div>
+
+            <div id="sourceJsonViewerWrap" class="json-viewer-wrap hidden">
+                <textarea id="sourceJsonViewer" readonly spellcheck="false"></textarea>
+            </div>
+
+            <div id="sourceStatus" class="list-status hidden"></div>
+
+            <div id="workflowContainer" class="repo-list" role="listbox" aria-label="Source workflows">
+                <div class="empty-message">Search for a workflow by its internal name (WFName), or upload a JSON file.</div>
+            </div>
+
+            <div id="uploadedJsonEditorWrap" class="uploaded-json-editor hidden">
+                <div class="uploaded-json-editor-head">
+                    <span>Uploaded source JSON</span>
+                    <button id="useFetchedSourceBtn" class="btn-link" type="button">Use fetched workflow instead</button>
+                </div>
+                <textarea id="uploadedJsonEditor" spellcheck="false"></textarea>
+                <button id="saveUploadedJsonBtn" class="btn btn-secondary btn-block" type="button">Save Changes</button>
+            </div>
+        </section>
+
+        <!-- CENTER: SUMMARY / PREVIEW / IMPORT -->
+        <section class="panel panel-center" aria-labelledby="summaryHeading">
+            <div class="panel-head">
+                <h2 id="summaryHeading">Workflow Summary</h2>
+            </div>
+
+            <div id="summaryEmpty" class="empty-state">
+                <div class="empty-icon" aria-hidden="true">&#128193;</div>
+                <p>Select a source workflow to see its summary.</p>
+            </div>
+
+            <div id="summaryCard" class="summary-card hidden">
+                <div class="summary-repo-name" id="summaryWorkflowName">-</div>
+
+                <div class="summary-stats">
+                    <div class="stat">
+                        <span class="stat-value" id="statStages">0</span>
+                        <span class="stat-label">Stages</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="statTrigger">-</span>
+                        <span class="stat-label">Trigger Method</span>
+                    </div>
+                    <div class="stat stat-wide">
+                        <span class="stat-value" id="statType">-</span>
+                        <span class="stat-label">Workflow Type</span>
+                    </div>
+                </div>
+
+                <button id="previewBtn" class="btn btn-secondary btn-block" type="button">
+                    Preview Workflow
+                </button>
+            </div>
+
+            <div class="transfer-track" aria-hidden="true">
+                <span class="track-label">Source</span>
+                <div class="track-line">
+                    <span class="track-dot" id="trackDot"></span>
+                </div>
+                <span class="track-label">Target</span>
+            </div>
+
+            <button id="generateJsonBtn" class="btn btn-secondary btn-block" type="button" disabled>
+                View / Download Generated JSON
+            </button>
+
+            <div class="advanced-preview">
+                <button id="toggleJsonBtn" class="btn-link hidden" type="button" aria-expanded="false">
+                    Show Transformed JSON
+                </button>
+                <div id="jsonViewerWrap" class="json-viewer-wrap hidden">
+                    <textarea id="jsonViewer" readonly spellcheck="false"></textarea>
+                </div>
+            </div>
+
+            <button id="validateBtn" class="btn btn-secondary btn-block" type="button" disabled>
+                Validate Compatibility
+            </button>
+
+            <div id="validationPanel" class="validation-panel hidden">
+                <div id="validationSummary" class="validation-summary"></div>
+                <ul id="validationList" class="validation-list"></ul>
+            </div>
+
+            <button id="importBtn" class="btn btn-primary btn-block" type="button" disabled>
+                Import Workflow
+            </button>
+
+            <div id="progressPanel" class="progress-panel hidden">
+                <ul id="progressList" class="progress-list"></ul>
+            </div>
+        </section>
+
+        <!-- RIGHT: TARGET WORKFLOW -->
+        <section class="panel panel-target" aria-labelledby="targetHeading">
+            <div class="panel-head">
+                <h2 id="targetHeading">Target Workflow</h2>
+                <button id="crossTenantBtn" class="btn btn-ghost" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                        <path d="M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9Z" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Cross-Tenant
+                </button>
+            </div>
+
+            <div id="tenantBadge" class="tenant-badge hidden">
+                <span class="tenant-badge-dot"></span>
+                <span id="tenantBadgeText">Cross-tenant target active</span>
+                <button id="resetTenantBtn" class="tenant-badge-reset" type="button">Use same tenant</button>
+            </div>
+
+            <div class="search-wrap search-wrap-row">
+                <input
+                    type="text"
+                    id="targetSearchInput"
+                    class="search-input"
+                    placeholder="Search by internal name (WFName)..."
+                    autocomplete="off"
+                />
+                <button id="targetSearchBtn" class="btn btn-secondary" type="button">Search</button>
+            </div>
+
+            <div id="targetStatus" class="list-status hidden"></div>
+
+            <div id="targetWorkflowContainer" class="repo-list" role="listbox" aria-label="Target workflows">
+                <div class="empty-message">Search for a workflow by its internal name (WFName).</div>
+            </div>
+
+            <div class="selected-target-card">
+                <div class="selected-target-label">Selected Target</div>
+                <div class="selected-target-name" id="selectedTargetName">No target selected</div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============================================= -->
+    <!-- CONFIRMATION MODAL                             -->
+    <!-- ============================================= -->
+    <div id="confirmModal" class="modal-overlay hidden">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+            <h3 id="confirmTitle">Confirm import</h3>
+            <p class="modal-copy">You are about to overwrite the workflow configuration.</p>
+
+            <div class="confirm-flow">
+                <div class="confirm-repo">
+                    <span class="confirm-repo-label">Source</span>
+                    <span class="confirm-repo-name" id="confirmSourceName">-</span>
+                </div>
+                <div class="confirm-arrow" aria-hidden="true">&#8594;</div>
+                <div class="confirm-repo">
+                    <span class="confirm-repo-label">Target</span>
+                    <span class="confirm-repo-name" id="confirmTargetName">-</span>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="confirmCancelBtn" class="btn btn-ghost" type="button">Cancel</button>
+                <button id="confirmProceedBtn" class="btn btn-primary" type="button">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- SUCCESS MODAL                                  -->
+    <!-- ============================================= -->
+    <div id="successModal" class="modal-overlay hidden">
+        <div class="modal-card success-card" role="dialog" aria-modal="true" aria-labelledby="successTitle">
+            <div class="success-icon" aria-hidden="true">&#9989;</div>
+            <h3 id="successTitle">Workflow imported successfully</h3>
+
+            <div class="confirm-flow confirm-flow-vertical">
+                <div class="confirm-repo">
+                    <span class="confirm-repo-label">Source</span>
+                    <span class="confirm-repo-name" id="successSourceName">-</span>
+                </div>
+                <div class="confirm-arrow" aria-hidden="true">&#8595;</div>
+                <div class="confirm-repo">
+                    <span class="confirm-repo-label">Target</span>
+                    <span class="confirm-repo-name" id="successTargetName">-</span>
+                </div>
+            </div>
+
+            <div class="summary-stats success-stats">
+                <div class="stat">
+                    <span class="stat-value" id="successStages">0</span>
+                    <span class="stat-label">Stages Migrated</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="successTrigger">-</span>
+                    <span class="stat-label">Trigger Method</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="successTime">0s</span>
+                    <span class="stat-label">Import Time</span>
+                </div>
+            </div>
+
+            <div class="modal-actions-split audit-export-actions">
+                <button id="exportSummaryJsonBtn" class="btn btn-ghost" type="button">Export Summary (JSON)</button>
+                <button id="exportSummaryTextBtn" class="btn btn-ghost" type="button">Export Summary (Text)</button>
+            </div>
+
+            <button id="importAnotherBtn" class="btn btn-primary btn-block" type="button">
+                Import Another Workflow
+            </button>
+        </div>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- SYSTEM GENERATED JSON MODAL                    -->
+    <!-- ============================================= -->
+    <div id="generatedJsonModal" class="modal-overlay hidden">
+        <div class="modal-card generated-json-card" role="dialog" aria-modal="true" aria-labelledby="generatedJsonTitle">
+            <h3 id="generatedJsonTitle">System generated JSON</h3>
+            <p class="modal-copy">This is the exact payload that would be sent to the target workflow.</p>
+
+            <div id="generatedJsonMeta" class="generated-json-meta"></div>
+
+            <textarea id="generatedJsonViewer" class="generated-json-textarea" readonly spellcheck="false"></textarea>
+
+            <div class="modal-actions modal-actions-split">
+                <button id="downloadGeneratedJsonBtn" class="btn btn-secondary" type="button">Download JSON</button>
+                <button id="closeGeneratedJsonBtn" class="btn btn-primary" type="button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- CROSS-TENANT CONFIG MODAL                      -->
+    <!-- ============================================= -->
+    <div id="crossTenantModal" class="modal-overlay hidden">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="crossTenantTitle">
+            <h3 id="crossTenantTitle">Cross-tenant target</h3>
+            <p class="modal-copy">Enter the target tenant's base URL and credentials. The source workflow list keeps using this app's normal tenant.</p>
+
+            <div class="tenant-form">
+                <label class="tenant-field">
+                    <span>Target Base URL</span>
+                    <input type="text" id="tenantBaseUrl" placeholder="https://your-target-tenant.example.com" autocomplete="off" />
+                </label>
+                <label class="tenant-field">
+                    <span>EmployeeGUID</span>
+                    <input type="text" id="tenantEmployeeGUID" autocomplete="off" />
+                </label>
+                <label class="tenant-field">
+                    <span>HRZEmail</span>
+                    <input type="text" id="tenantHrzEmail" autocomplete="off" />
+                </label>
+                <label class="tenant-field">
+                    <span>HRZEmpID</span>
+                    <input type="text" id="tenantHrzEmpID" autocomplete="off" />
+                </label>
+            </div>
+
+            <div class="modal-actions modal-actions-split">
+                <button id="crossTenantCancelBtn" class="btn btn-ghost" type="button">Cancel</button>
+                <button id="crossTenantSaveBtn" class="btn btn-primary" type="button">Connect Target Tenant</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- TOASTS                                         -->
+    <!-- ============================================= -->
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="https://appai.quickappflow.com/Attachment/downloadfile?fileUrl=Pages1%2Fapi_31932370-6688-45d2-bfac-192f478ef4c6.js"></script>
+    <script src="https://appai.quickappflow.com/Attachment/downloadfile?fileUrl=Pages1%2Ftransform_9053cfc0-74bf-4166-8caf-e84e25ae580e.js"></script>
+    <script src="https://appai.quickappflow.com/Attachment/downloadfile?fileUrl=Pages1%2Fui_56201a73-62dc-4bce-a4e2-ec6ca231ed7c.js"></script>
+    <script src="https://appai.quickappflow.com/Attachment/downloadfile?fileUrl=Pages1%2Fscript_78173884-21ce-4688-8a15-47e8179d71e1.js"></script>
+</body>
+</html>
