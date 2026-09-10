@@ -194,15 +194,115 @@ exportSummaryTextBtn.addEventListener('click', () => {
     downloadTextFile(formatBulkMigrationSummaryAsText(bulk), 'workflow-migration-summary.txt');
 });
 
+// Downloads the Source selection as JSON. With exactly one loaded Source
+// this behaves as before (a single .json file). With more than one, it
+// bundles every loaded Source workflow into a single .zip - one .json file
+// per workflow - rather than the browser silently only ever downloading
+// whichever chip happens to be focused. Entries still being fetched by
+// WFID are skipped (with a toast) rather than downloaded half-loaded.
 downloadSourceJsonBtn.addEventListener('click', () => {
-    const entry = sourceEntries.find(e => e.id === focusedSourceId);
-    if (!entry) {
-        showToast('Select a Source workflow chip first.', 'error');
+    const loadedEntries = sourceEntries.filter(e => !e.loading);
+
+    if (loadedEntries.length === 0) {
+        showToast('Add at least one Source workflow first.', 'error');
         return;
     }
-    const filename = `${entry.workflow.WFName || 'source-workflow'}.json`;
-    downloadTextFile(JSON.stringify(entry.workflow, null, 2), filename);
+
+    const loadingCount = sourceEntries.length - loadedEntries.length;
+    if (loadingCount > 0) {
+        showToast(`${loadingCount} workflow(s) still loading were skipped from the download.`, 'info');
+    }
+
+    if (loadedEntries.length === 1) {
+        const entry = loadedEntries[0];
+        const filename = `${sanitizeFilenamePart(entry.workflow.WFName || workflowDisplayName(entry.workflow))}.json`;
+        downloadTextFile(JSON.stringify(entry.workflow, null, 2), filename);
+        return;
+    }
+
+    downloadSourceEntriesAsZip(loadedEntries);
 });
+
+// Strips characters that aren't safe in a filename and collapses
+// whitespace, so workflow names full of slashes/colons/etc. don't break
+// the downloaded file (or a path inside the ZIP).
+function sanitizeFilenamePart(name) {
+    const cleaned = String(name || 'workflow')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, '_')
+        .slice(0, 80);
+    return cleaned || 'workflow';
+}
+
+// Picks a filename for `workflow` inside the ZIP that doesn't collide with
+// one already used: plain name first, then name+WFID, then name+counter.
+function buildUniqueZipFilename(workflow, usedNames) {
+    const base = sanitizeFilenamePart(workflow.WFName || workflowDisplayName(workflow));
+
+    let candidate = `${base}.json`;
+    if (!usedNames.has(candidate.toLowerCase())) {
+        usedNames.add(candidate.toLowerCase());
+        return candidate;
+    }
+
+    if (workflow.WFID) {
+        candidate = `${base}-${sanitizeFilenamePart(workflow.WFID)}.json`;
+        if (!usedNames.has(candidate.toLowerCase())) {
+            usedNames.add(candidate.toLowerCase());
+            return candidate;
+        }
+    }
+
+    let counter = 2;
+    candidate = `${base}-${counter}.json`;
+    while (usedNames.has(candidate.toLowerCase())) {
+        counter += 1;
+        candidate = `${base}-${counter}.json`;
+    }
+    usedNames.add(candidate.toLowerCase());
+    return candidate;
+}
+
+async function downloadSourceEntriesAsZip(entries) {
+    if (typeof JSZip === 'undefined') {
+        showToast('ZIP support failed to load - try downloading workflows one at a time instead.', 'error');
+        return;
+    }
+
+    const originalLabel = downloadSourceJsonBtn.textContent;
+    downloadSourceJsonBtn.disabled = true;
+    downloadSourceJsonBtn.textContent = 'Zipping...';
+
+    try {
+        const zip = new JSZip();
+        const usedNames = new Set();
+
+        entries.forEach(entry => {
+            const filename = buildUniqueZipFilename(entry.workflow, usedNames);
+            zip.file(filename, JSON.stringify(entry.workflow, null, 2));
+        });
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `source-workflows-${new Date().toISOString().slice(0, 10)}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showToast(`Downloaded ${entries.length} workflow(s) as a ZIP.`, 'success');
+    } catch (error) {
+        console.error(error);
+        showToast('Unable to build the ZIP file.', 'error');
+    } finally {
+        downloadSourceJsonBtn.textContent = originalLabel;
+        renderSourcePanel(); // recompute the correct disabled state / label
+    }
+}
 
 viewSourceJsonBtn.addEventListener('click', () => {
     const entry = sourceEntries.find(e => e.id === focusedSourceId);
@@ -580,9 +680,13 @@ function renderSourcePanel() {
     sourceCountEl.textContent = String(sourceEntries.length);
 
     const focused = sourceEntries.find(e => e.id === focusedSourceId);
-    const jsonActionsEnabled = Boolean(focused && !focused.loading);
-    downloadSourceJsonBtn.disabled = !jsonActionsEnabled;
-    viewSourceJsonBtn.disabled = !jsonActionsEnabled;
+    viewSourceJsonBtn.disabled = !(focused && !focused.loading);
+
+    const loadedCount = sourceEntries.filter(e => !e.loading).length;
+    downloadSourceJsonBtn.disabled = loadedCount === 0;
+    downloadSourceJsonBtn.textContent = loadedCount > 1
+        ? `Download All as ZIP (${loadedCount})`
+        : 'Download JSON';
 
     renderFocusedSourceSummary();
     renderPairPickers();
@@ -1279,6 +1383,7 @@ function resetForNewImport() {
     uploadedJsonEditorWrap.classList.add('hidden');
     uploadedJsonEditor.value = '';
     downloadSourceJsonBtn.disabled = true;
+    downloadSourceJsonBtn.textContent = 'Download JSON';
     viewSourceJsonBtn.disabled = true;
     sourceJsonViewerWrap.classList.add('hidden');
     sourceJsonViewer.value = '';
