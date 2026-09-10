@@ -171,85 +171,152 @@ function renderNoSearchResult(containerEl, message) {
 }
 
 /* ============================================= */
-/* PAIR SELECTION MATRIX (Source x Target grid)   */
+/* PAIR SELECTION: MASTER-DETAIL PICKER           */
 /* ============================================= */
 
 // Every Source x Target combination is a candidate migration pair, but not
 // every one is necessarily wanted - this key identifies one specific
 // combination, shared between script.js (which owns the Set of currently
-// selected keys) and this file (which just renders checkboxes for them).
+// selected keys) and this file (which just renders checkboxes/rows for
+// them).
 function pairKey(sourceId, targetId) {
     return `${sourceId}::${targetId}`;
 }
 
-// Renders an interactive Source x Target checkbox grid so the person can
-// choose exactly which combinations get validated/imported, rather than
-// being forced into every Source against every Target. `sources` and
-// `targets` are plain { id, workflow } entries (already filtered to loaded
-// ones by the caller); `selectedKeys` is a Set of pairKey(...) strings for
-// the pairs currently turned on.
-//
-// This function only renders markup - it doesn't hold or mutate selection
-// state. The caller wires actual state changes via event delegation on
-// `containerEl`: checkbox changes carry data-source-id/data-target-id, the
-// corner buttons carry data-matrix-action="select-all|select-none", and row
-// headers carry data-toggle-row / column headers carry data-toggle-col so
-// a whole row or column can be flipped at once.
-function renderPairMatrix(containerEl, sources, targets, selectedKeys) {
-    if (sources.length === 0 || targets.length === 0) {
-        containerEl.innerHTML = '<div class="empty-message">Add at least one Source and one Target above to choose pairs.</div>';
+function matchesFilter(workflow, term) {
+    if (!term) return true;
+    const q = term.trim().toLowerCase();
+    if (!q) return true;
+    const name = workflowDisplayName(workflow).toLowerCase();
+    const internalName = (workflow.WFName || '').toLowerCase();
+    return name.includes(q) || internalName.includes(q);
+}
+
+// Renders the "Sources" list in the master-detail pair picker: one row per
+// loaded Source, each showing how many Targets are currently paired with
+// it (out of the total Target count) so overall coverage is visible
+// without opening every row. Clicking a row focuses it, which is what
+// drives the Targets list next to it - this function only renders markup,
+// it doesn't hold selection state itself.
+function renderPairSourceList(containerEl, sources, options) {
+    const opts = options || {};
+
+    if (sources.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">Add Source workflows on the left first.</div>';
         return;
     }
 
-    const headerCells = targets.map(t => `
-        <th class="pair-matrix-head-cell" data-toggle-col="${escapeHtml(t.id)}" title="Toggle this whole column">
-            <span class="pair-matrix-head-label">${escapeHtml(workflowDisplayName(t.workflow))}</span>
-        </th>
-    `).join('');
+    const filtered = sources.filter(s => matchesFilter(s.workflow, opts.filterTerm));
 
-    const bodyRows = sources.map(s => {
-        const cells = targets.map(t => {
-            const checked = selectedKeys.has(pairKey(s.id, t.id));
-            return `
-                <td class="pair-matrix-cell">
-                    <input
-                        type="checkbox"
-                        class="pair-matrix-checkbox"
-                        data-source-id="${escapeHtml(s.id)}"
-                        data-target-id="${escapeHtml(t.id)}"
-                        ${checked ? 'checked' : ''}
-                        aria-label="Import ${escapeHtml(workflowDisplayName(s.workflow))} into ${escapeHtml(workflowDisplayName(t.workflow))}"
-                    />
-                </td>
-            `;
-        }).join('');
+    if (filtered.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">No sources match your search.</div>';
+        return;
+    }
 
-        return `
-            <tr>
-                <th class="pair-matrix-head-cell pair-matrix-row-head" data-toggle-row="${escapeHtml(s.id)}" title="Toggle this whole row">
-                    <span class="pair-matrix-head-label">${escapeHtml(workflowDisplayName(s.workflow))}</span>
-                </th>
-                ${cells}
-            </tr>
+    containerEl.innerHTML = '';
+
+    filtered.forEach(s => {
+        const count = opts.getSelectedCount ? opts.getSelectedCount(s.id) : 0;
+        const isFocused = opts.focusedId === s.id;
+
+        const row = document.createElement('div');
+        row.className = 'pair-source-row' + (isFocused ? ' pair-row-focused' : '');
+        row.setAttribute('role', 'option');
+        row.tabIndex = 0;
+        if (isFocused) row.setAttribute('aria-selected', 'true');
+
+        row.innerHTML = `
+            <span class="pair-source-row-name">${escapeHtml(workflowDisplayName(s.workflow))}</span>
+            <span class="pair-source-row-count">${count}/${opts.totalTargets || 0}</span>
         `;
-    }).join('');
 
-    containerEl.innerHTML = `
-        <table class="pair-matrix-table">
-            <thead>
-                <tr>
-                    <th class="pair-matrix-corner">
-                        <button type="button" class="btn-link pair-matrix-corner-btn" data-matrix-action="select-all">All</button>
-                        <button type="button" class="btn-link pair-matrix-corner-btn" data-matrix-action="select-none">None</button>
-                    </th>
-                    ${headerCells}
-                </tr>
-            </thead>
-            <tbody>
-                ${bodyRows}
-            </tbody>
-        </table>
-    `;
+        if (opts.onFocus) {
+            row.addEventListener('click', () => opts.onFocus(s.id));
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    opts.onFocus(s.id);
+                }
+            });
+        }
+
+        containerEl.appendChild(row);
+    });
+}
+
+// Renders the "Targets for <focused source>" checklist - only ever as many
+// rows as there are Targets (never Source x Target), and only for whichever
+// Source is currently focused in the list next to it. `options.isChecked`
+// and `options.onToggle` are how script.js's selection state actually gets
+// read and mutated - this function stays state-free.
+function renderPairTargetList(containerEl, targets, options) {
+    const opts = options || {};
+
+    if (!opts.focusedSourceId) {
+        containerEl.innerHTML = '<div class="empty-message">Pick a Source on the left to choose its Targets.</div>';
+        return;
+    }
+
+    if (targets.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">Add Target workflows on the right first.</div>';
+        return;
+    }
+
+    const filtered = targets.filter(t => matchesFilter(t.workflow, opts.filterTerm));
+
+    if (filtered.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">No targets match your search.</div>';
+        return;
+    }
+
+    containerEl.innerHTML = '';
+
+    filtered.forEach(t => {
+        const checked = opts.isChecked ? opts.isChecked(t.id) : false;
+
+        const row = document.createElement('label');
+        row.className = 'pair-target-row';
+        row.innerHTML = `
+            <input type="checkbox" class="pair-target-checkbox" ${checked ? 'checked' : ''} />
+            <span class="pair-target-row-name">${escapeHtml(workflowDisplayName(t.workflow))}</span>
+        `;
+
+        const checkbox = row.querySelector('.pair-target-checkbox');
+        if (opts.onToggle) {
+            checkbox.addEventListener('change', () => opts.onToggle(t.id, checkbox.checked));
+        }
+
+        containerEl.appendChild(row);
+    });
+}
+
+// Renders the flat "Review selected pairs" audit list - every currently
+// selected pair as one removable row, regardless of which Source happens
+// to be focused in the master-detail view above. This is the actual list
+// Validate/Import operate on, so it's the one place to confirm the full
+// selection before running anything.
+function renderPairReviewList(containerEl, pairs, onRemove) {
+    if (pairs.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">No pairs selected yet.</div>';
+        return;
+    }
+
+    containerEl.innerHTML = '';
+
+    pairs.forEach(pair => {
+        const row = document.createElement('div');
+        row.className = 'pair-review-item';
+        row.innerHTML = `
+            <span class="pair-review-route">${escapeHtml(pair.sourceName)}<span class="pair-arrow" aria-hidden="true">&rarr;</span>${escapeHtml(pair.targetName)}</span>
+            <button type="button" class="chip-remove-btn" aria-label="Remove pair: ${escapeHtml(pair.sourceName)} to ${escapeHtml(pair.targetName)}">&times;</button>
+        `;
+
+        if (onRemove) {
+            row.querySelector('.chip-remove-btn').addEventListener('click', () => onRemove(pair.sourceId, pair.targetId));
+        }
+
+        containerEl.appendChild(row);
+    });
 }
 
 /* ============================================= */

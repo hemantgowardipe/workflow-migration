@@ -42,7 +42,19 @@ const exportSummaryTextBtn = document.getElementById('exportSummaryTextBtn');
 const summaryEmpty = document.getElementById('summaryEmpty');
 const summaryCard = document.getElementById('summaryCard');
 const summaryPairCount = document.getElementById('summaryPairCount');
-const pairMatrixContainer = document.getElementById('pairMatrixContainer');
+const pairSelectAllBtn = document.getElementById('pairSelectAllBtn');
+const pairClearAllBtn = document.getElementById('pairClearAllBtn');
+const pairMatchNameBtn = document.getElementById('pairMatchNameBtn');
+const pairOrderBtn = document.getElementById('pairOrderBtn');
+const pairSourceSearch = document.getElementById('pairSourceSearch');
+const pairTargetSearch = document.getElementById('pairTargetSearch');
+const pairSourceListContainer = document.getElementById('pairSourceListContainer');
+const pairTargetListContainer = document.getElementById('pairTargetListContainer');
+const pairTargetHeading = document.getElementById('pairTargetHeading');
+const pairCheckVisibleBtn = document.getElementById('pairCheckVisibleBtn');
+const pairUncheckVisibleBtn = document.getElementById('pairUncheckVisibleBtn');
+const pairReviewToggleBtn = document.getElementById('pairReviewToggleBtn');
+const pairReviewList = document.getElementById('pairReviewList');
 const focusedSourceName = document.getElementById('focusedSourceName');
 const statStages = document.getElementById('statStages');
 const statTrigger = document.getElementById('statTrigger');
@@ -139,6 +151,15 @@ let targetHighlightIndex = -1;
 // a later, unrelated re-render.
 let selectedPairKeys = new Set();
 let knownPairKeys = new Set();
+
+// State for the master-detail pair picker itself (separate from the
+// left-panel focusedSourceId, which drives JSON view/download/edit) -
+// which Source's Target list is currently showing, and the two free-text
+// filters for narrowing each side of the picker at scale.
+let pairFocusedSourceId = null;
+let pairSourceFilter = '';
+let pairTargetFilter = '';
+let pairReviewOpen = false;
 
 // Validation runs across whatever's currently selected in the pair matrix.
 // `lastValidationPairs` is an array of per-pair results; `lastValidationSignature`
@@ -762,71 +783,196 @@ function syncPairSelection() {
     });
 }
 
+// Renders every piece of the master-detail pair picker from current state:
+// the pair-count banner, the Sources list (with per-row selected-count
+// badges), the Targets list scoped to whichever Source is focused, and the
+// flat "review" list of every currently selected pair. Called after any
+// mutation to sourceEntries/targetEntries/selectedPairKeys/filters/focus.
 function renderPairOverview() {
     syncPairSelection();
 
     const loadedSources = sourceEntries.filter(e => !e.loading);
     const possiblePairCount = loadedSources.length * targetEntries.length;
-    const selectedCount = getSelectedPairs().length;
+    const selectedPairs = getSelectedPairs();
 
     summaryPairCount.textContent = possiblePairCount === 0
         ? 'Add Source and Target workflows to begin.'
-        : `${selectedCount} of ${possiblePairCount} possible pair(s) selected for import`;
+        : `${selectedPairs.length} of ${possiblePairCount} possible pair(s) selected for import`;
 
-    renderPairMatrix(pairMatrixContainer, loadedSources, targetEntries, selectedPairKeys);
+    // Keep the focused Source valid - default to the first loaded Source
+    // once one exists, and drop the focus if that Source was removed.
+    if (!loadedSources.some(s => s.id === pairFocusedSourceId)) {
+        pairFocusedSourceId = loadedSources.length > 0 ? loadedSources[0].id : null;
+    }
+
+    renderPairSourceList(pairSourceListContainer, loadedSources, {
+        focusedId: pairFocusedSourceId,
+        filterTerm: pairSourceFilter,
+        totalTargets: targetEntries.length,
+        getSelectedCount: (sourceId) => targetEntries.filter(t => selectedPairKeys.has(pairKey(sourceId, t.id))).length,
+        onFocus: (sourceId) => {
+            pairFocusedSourceId = sourceId;
+            renderPairOverview();
+        }
+    });
+
+    const focusedSourceEntry = loadedSources.find(s => s.id === pairFocusedSourceId);
+    pairTargetHeading.textContent = focusedSourceEntry
+        ? `Targets for ${workflowDisplayName(focusedSourceEntry.workflow)}`
+        : 'Targets';
+
+    renderPairTargetList(pairTargetListContainer, targetEntries, {
+        focusedSourceId: pairFocusedSourceId,
+        filterTerm: pairTargetFilter,
+        isChecked: (targetId) => selectedPairKeys.has(pairKey(pairFocusedSourceId, targetId)),
+        onToggle: (targetId, checked) => {
+            const key = pairKey(pairFocusedSourceId, targetId);
+            if (checked) {
+                selectedPairKeys.add(key);
+            } else {
+                selectedPairKeys.delete(key);
+            }
+            invalidateValidation();
+            renderPairOverview();
+            updateActionAvailability();
+        }
+    });
+
+    renderPairReviewList(
+        pairReviewList,
+        selectedPairs.map(({ sourceEntry, targetEntry }) => ({
+            sourceId: sourceEntry.id,
+            targetId: targetEntry.id,
+            sourceName: workflowDisplayName(sourceEntry.workflow),
+            targetName: workflowDisplayName(targetEntry.workflow)
+        })),
+        (sourceId, targetId) => {
+            selectedPairKeys.delete(pairKey(sourceId, targetId));
+            invalidateValidation();
+            renderPairOverview();
+            updateActionAvailability();
+        }
+    );
 }
 
-// Event delegation: individual checkbox toggles, plus the corner
-// All/None buttons and clicking a row/column heading to flip everything in
-// that row/column at once (a "smart" toggle - if the whole row/column is
-// already fully selected, clicking it clears the row/column instead of
-// re-selecting it).
-pairMatrixContainer.addEventListener('change', (e) => {
-    const checkbox = e.target.closest('.pair-matrix-checkbox');
-    if (!checkbox) return;
+pairSourceSearch.addEventListener('input', () => {
+    pairSourceFilter = pairSourceSearch.value;
+    renderPairOverview();
+});
 
-    const key = pairKey(checkbox.dataset.sourceId, checkbox.dataset.targetId);
-    if (checkbox.checked) {
-        selectedPairKeys.add(key);
-    } else {
-        selectedPairKeys.delete(key);
+pairTargetSearch.addEventListener('input', () => {
+    pairTargetFilter = pairTargetSearch.value;
+    renderPairOverview();
+});
+
+pairSelectAllBtn.addEventListener('click', () => {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    loadedSources.forEach(s => targetEntries.forEach(t => selectedPairKeys.add(pairKey(s.id, t.id))));
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+    showToast('All possible pairs selected.', 'success');
+});
+
+pairClearAllBtn.addEventListener('click', () => {
+    selectedPairKeys.clear();
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+    showToast('All pairs cleared.', 'info');
+});
+
+// Replaces the current selection with pairs whose Source and Target names
+// correspond - checked against both WFName (internal name) and AppTitle
+// (display name) on each side, case-insensitively, since either field
+// might be the one that actually lines up between two tenants/environments.
+pairMatchNameBtn.addEventListener('click', () => {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    selectedPairKeys.clear();
+
+    let matchCount = 0;
+    loadedSources.forEach(s => {
+        const sourceNames = [s.workflow.WFName, s.workflow.AppTitle]
+            .filter(Boolean)
+            .map(n => n.toLowerCase());
+
+        if (sourceNames.length === 0) return;
+
+        targetEntries.forEach(t => {
+            const targetNames = [t.workflow.WFName, t.workflow.AppTitle]
+                .filter(Boolean)
+                .map(n => n.toLowerCase());
+
+            const isMatch = sourceNames.some(sn => targetNames.includes(sn));
+            if (isMatch) {
+                selectedPairKeys.add(pairKey(s.id, t.id));
+                matchCount += 1;
+            }
+        });
+    });
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+    showToast(
+        matchCount > 0 ? `Matched ${matchCount} pair(s) by name.` : 'No matching names found between Sources and Targets.',
+        matchCount > 0 ? 'success' : 'info'
+    );
+});
+
+// Replaces the current selection with each Source paired to the Target at
+// the same position in its list - useful when the two lists were built in
+// a corresponding order (e.g. promoting a batch from dev to staging).
+pairOrderBtn.addEventListener('click', () => {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    selectedPairKeys.clear();
+
+    const count = Math.min(loadedSources.length, targetEntries.length);
+    for (let i = 0; i < count; i++) {
+        selectedPairKeys.add(pairKey(loadedSources[i].id, targetEntries[i].id));
     }
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+    showToast(`Paired ${count} Source(s) to Target(s) by list order.`, 'success');
+});
+
+// "Check/uncheck visible" act only on whichever Targets the current search
+// filter is showing for the focused Source - lets someone narrow to a
+// handful of Targets by name and bulk-toggle just those, without affecting
+// anything hidden by the filter.
+pairCheckVisibleBtn.addEventListener('click', () => {
+    if (!pairFocusedSourceId) return;
+
+    targetEntries
+        .filter(t => matchesFilter(t.workflow, pairTargetFilter))
+        .forEach(t => selectedPairKeys.add(pairKey(pairFocusedSourceId, t.id)));
 
     invalidateValidation();
     renderPairOverview();
     updateActionAvailability();
 });
 
-pairMatrixContainer.addEventListener('click', (e) => {
-    const actionBtn = e.target.closest('[data-matrix-action]');
-    const rowHead = e.target.closest('[data-toggle-row]');
-    const colHead = e.target.closest('[data-toggle-col]');
+pairUncheckVisibleBtn.addEventListener('click', () => {
+    if (!pairFocusedSourceId) return;
 
-    if (!actionBtn && !rowHead && !colHead) return;
-
-    const loadedSources = sourceEntries.filter(s => !s.loading);
-
-    if (actionBtn) {
-        const turnOn = actionBtn.dataset.matrixAction === 'select-all';
-        loadedSources.forEach(s => targetEntries.forEach(t => {
-            const key = pairKey(s.id, t.id);
-            if (turnOn) selectedPairKeys.add(key); else selectedPairKeys.delete(key);
-        }));
-    } else if (rowHead) {
-        const sourceId = rowHead.dataset.toggleRow;
-        const rowKeys = targetEntries.map(t => pairKey(sourceId, t.id));
-        const allOn = rowKeys.every(k => selectedPairKeys.has(k));
-        rowKeys.forEach(k => (allOn ? selectedPairKeys.delete(k) : selectedPairKeys.add(k)));
-    } else if (colHead) {
-        const targetId = colHead.dataset.toggleCol;
-        const colKeys = loadedSources.map(s => pairKey(s.id, targetId));
-        const allOn = colKeys.every(k => selectedPairKeys.has(k));
-        colKeys.forEach(k => (allOn ? selectedPairKeys.delete(k) : selectedPairKeys.add(k)));
-    }
+    targetEntries
+        .filter(t => matchesFilter(t.workflow, pairTargetFilter))
+        .forEach(t => selectedPairKeys.delete(pairKey(pairFocusedSourceId, t.id)));
 
     invalidateValidation();
     renderPairOverview();
     updateActionAvailability();
+});
+
+pairReviewToggleBtn.addEventListener('click', () => {
+    pairReviewOpen = !pairReviewOpen;
+    pairReviewList.classList.toggle('hidden', !pairReviewOpen);
+    pairReviewToggleBtn.setAttribute('aria-expanded', String(pairReviewOpen));
+    pairReviewToggleBtn.classList.toggle('pair-review-toggle-open', pairReviewOpen);
 });
 
 function renderFocusedSourceSummary() {
@@ -1510,6 +1656,15 @@ function resetForNewImport() {
 
     selectedPairKeys = new Set();
     knownPairKeys = new Set();
+    pairFocusedSourceId = null;
+    pairSourceFilter = '';
+    pairTargetFilter = '';
+    pairReviewOpen = false;
+    pairSourceSearch.value = '';
+    pairTargetSearch.value = '';
+    pairReviewList.classList.add('hidden');
+    pairReviewToggleBtn.setAttribute('aria-expanded', 'false');
+    pairReviewToggleBtn.classList.remove('pair-review-toggle-open');
 
     lastGeneratedPayload = null;
     lastBulkSummary = null;

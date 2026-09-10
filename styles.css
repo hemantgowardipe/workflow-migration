@@ -868,7 +868,7 @@ button {
 }
 
 /* =================================================== */
-/* CENTER PANEL: PAIR SELECTION MATRIX                    */
+/* CENTER PANEL: PAIR SELECTION (master-detail picker)    */
 /* =================================================== */
 
 .pair-matrix-section {
@@ -881,7 +881,7 @@ button {
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 .pair-matrix-title {
@@ -892,98 +892,208 @@ button {
     color: var(--color-ink-faint);
 }
 
-.pair-matrix-hint {
-    font-size: 11px;
-    color: var(--color-ink-faint);
-    font-style: italic;
+.pair-picker-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
 }
 
-.pair-matrix-container {
+.btn-xs {
+    padding: 6px 10px;
+    font-size: 11.5px;
+}
+
+.pair-master-detail {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.pair-master-col,
+.pair-detail-col {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     background: var(--color-surface-alt);
-    max-height: 260px;
-    overflow: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
-.pair-matrix-table {
-    border-collapse: collapse;
-    width: 100%;
+.pair-col-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-ink-faint);
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pair-mini-search {
+    margin-bottom: 8px;
+    padding: 6px 9px;
     font-size: 12px;
 }
 
-.pair-matrix-table th,
-.pair-matrix-table td {
-    border: 1px solid var(--color-border);
-    padding: 6px 8px;
-    text-align: center;
-    white-space: nowrap;
+.pair-row-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
 }
 
-.pair-matrix-corner {
-    position: sticky;
-    left: 0;
-    top: 0;
-    z-index: 3;
-    background: var(--color-surface);
+.pair-row-actions .btn-xs {
+    flex: 1;
+}
+
+.pair-source-list,
+.pair-target-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.pair-source-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-width: 90px;
-}
-
-.pair-matrix-corner-btn {
-    font-size: 11px;
-    padding: 2px 0;
-}
-
-.pair-matrix-head-cell {
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border-radius: var(--radius-sm);
     background: var(--color-surface);
-    font-weight: 700;
-    color: var(--color-ink);
+    border: 1px solid var(--color-border);
     cursor: pointer;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 12.5px;
 }
 
-.pair-matrix-head-cell:hover {
+.pair-source-row:hover {
+    border-color: var(--color-border-strong);
+}
+
+.pair-source-row.pair-row-focused {
+    border-color: var(--color-accent);
     background: var(--color-accent-soft);
 }
 
-thead .pair-matrix-head-cell {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-}
-
-.pair-matrix-row-head {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    text-align: left;
-    max-width: 160px;
-}
-
-.pair-matrix-head-label {
-    display: inline-block;
-    max-width: 140px;
+.pair-source-row-name {
+    font-weight: 600;
+    color: var(--color-ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    vertical-align: middle;
 }
 
-.pair-matrix-cell {
+.pair-source-row-count {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--color-surface-alt);
+    color: var(--color-ink-soft);
+}
+
+.pair-row-focused .pair-source-row-count {
     background: var(--color-surface);
+    color: var(--color-accent-strong);
 }
 
-.pair-matrix-checkbox {
+.pair-target-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.pair-target-row:hover {
+    border-color: var(--color-border-strong);
+}
+
+.pair-target-checkbox {
     width: 15px;
     height: 15px;
     accent-color: var(--color-accent);
     cursor: pointer;
+    flex-shrink: 0;
+}
+
+.pair-target-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pair-review-section {
+    margin-top: 10px;
+    border-top: 1px dashed var(--color-border);
+    padding-top: 10px;
+}
+
+.pair-review-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--color-ink);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pair-review-chevron {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--color-ink-faint);
+    transition: transform 0.15s ease;
+}
+
+.pair-review-toggle-open .pair-review-chevron {
+    transform: rotate(90deg);
+}
+
+.pair-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+
+.pair-review-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 9px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    font-size: 12px;
+}
+
+.pair-review-route {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--color-ink);
 }
 
 /* =================================================== */
@@ -1300,6 +1410,10 @@ thead .pair-matrix-head-cell {
     .panel-center,
     .panel-target {
         width: 100%;
+    }
+
+    .pair-master-detail {
+        grid-template-columns: 1fr;
     }
 
     .repo-list {

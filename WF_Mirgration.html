@@ -127,10 +127,45 @@
             <div class="pair-matrix-section">
                 <div class="pair-matrix-head">
                     <span class="pair-matrix-title">Select Source &rarr; Target Pairs</span>
-                    <span class="pair-matrix-hint">Click a row/column heading to toggle it all at once.</span>
                 </div>
-                <div id="pairMatrixContainer" class="pair-matrix-container">
-                    <div class="empty-message">Add at least one Source and one Target above to choose pairs.</div>
+
+                <div class="pair-picker-actions">
+                    <button id="pairSelectAllBtn" class="btn btn-ghost btn-xs" type="button">Select all</button>
+                    <button id="pairClearAllBtn" class="btn btn-ghost btn-xs" type="button">Clear all</button>
+                    <button id="pairMatchNameBtn" class="btn btn-ghost btn-xs" type="button">Match by name</button>
+                    <button id="pairOrderBtn" class="btn btn-ghost btn-xs" type="button">Pair 1-to-1 by order</button>
+                </div>
+
+                <div class="pair-master-detail">
+                    <div class="pair-master-col">
+                        <div class="pair-col-label">Sources</div>
+                        <input type="text" id="pairSourceSearch" class="search-input pair-mini-search" placeholder="Search sources..." autocomplete="off" />
+                        <div id="pairSourceListContainer" class="pair-source-list" role="listbox" aria-label="Sources for pairing">
+                            <div class="empty-message">Add Source workflows on the left first.</div>
+                        </div>
+                    </div>
+
+                    <div class="pair-detail-col">
+                        <div class="pair-col-label" id="pairTargetHeading">Targets</div>
+                        <input type="text" id="pairTargetSearch" class="search-input pair-mini-search" placeholder="Search targets..." autocomplete="off" />
+                        <div class="pair-row-actions">
+                            <button id="pairCheckVisibleBtn" class="btn btn-ghost btn-xs" type="button">Check visible</button>
+                            <button id="pairUncheckVisibleBtn" class="btn btn-ghost btn-xs" type="button">Uncheck visible</button>
+                        </div>
+                        <div id="pairTargetListContainer" class="pair-target-list" aria-label="Targets for the focused source">
+                            <div class="empty-message">Pick a Source on the left to choose its Targets.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pair-review-section">
+                    <button id="pairReviewToggleBtn" class="pair-review-toggle" type="button" aria-expanded="false">
+                        <span class="pair-review-chevron" aria-hidden="true">&#9656;</span>
+                        Review selected pairs
+                    </button>
+                    <div id="pairReviewList" class="pair-review-list hidden">
+                        <div class="empty-message">No pairs selected yet.</div>
+                    </div>
                 </div>
             </div>
 
