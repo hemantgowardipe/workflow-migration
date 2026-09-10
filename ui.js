@@ -246,9 +246,12 @@ function renderPairSourceList(containerEl, sources, options) {
 
 // Renders the "Targets for <focused source>" checklist - only ever as many
 // rows as there are Targets (never Source x Target), and only for whichever
-// Source is currently focused in the list next to it. `options.isChecked`
-// and `options.onToggle` are how script.js's selection state actually gets
-// read and mutated - this function stays state-free.
+// Source is currently focused in the list next to it. `targets` is already
+// filtered by the caller to exclude anything claimed by a *different*
+// Source (a Target can only ever belong to one Source), so this function
+// just needs to tell that apart from "no Targets exist at all" for the
+// empty-state message. `options.isChecked` and `options.onToggle` are how
+// script.js's selection state actually gets read and mutated.
 function renderPairTargetList(containerEl, targets, options) {
     const opts = options || {};
 
@@ -257,8 +260,13 @@ function renderPairTargetList(containerEl, targets, options) {
         return;
     }
 
-    if (targets.length === 0) {
+    if ((opts.totalTargets || 0) === 0) {
         containerEl.innerHTML = '<div class="empty-message">Add Target workflows on the right first.</div>';
+        return;
+    }
+
+    if (targets.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">Every Target is already paired with another Source. Each Target can only be paired with one Source at a time.</div>';
         return;
     }
 
@@ -293,8 +301,8 @@ function renderPairTargetList(containerEl, targets, options) {
 // Renders the flat "Review selected pairs" audit list - every currently
 // selected pair as one removable row, regardless of which Source happens
 // to be focused in the master-detail view above. This is the actual list
-// Validate/Import operate on, so it's the one place to confirm the full
-// selection before running anything.
+// Import operates on, so it's the one place to confirm the full selection
+// before running anything.
 function renderPairReviewList(containerEl, pairs, onRemove) {
     if (pairs.length === 0) {
         containerEl.innerHTML = '<div class="empty-message">No pairs selected yet.</div>';
@@ -316,60 +324,6 @@ function renderPairReviewList(containerEl, pairs, onRemove) {
         }
 
         containerEl.appendChild(row);
-    });
-}
-
-/* ============================================= */
-/* PER-PAIR VALIDATION RESULTS (Source x Target)  */
-/* ============================================= */
-
-// `pairResults` is an array of { sourceName, targetName, errors, warnings }
-// (one entry per Source x Target combination). Renders an overall summary
-// line plus one item per pair, so a person reviewing a large cross-product
-// can see at a glance which pairs are blocked.
-function renderPairValidationResults(summaryEl, listEl, pairResults) {
-    listEl.innerHTML = '';
-
-    const total = pairResults.length;
-    const blocked = pairResults.filter(p => p.errors.length > 0).length;
-    const withWarnings = pairResults.filter(p => p.errors.length === 0 && p.warnings.length > 0).length;
-
-    if (total === 0) {
-        summaryEl.className = 'validation-summary';
-        summaryEl.textContent = 'Nothing to validate yet.';
-    } else if (blocked === 0) {
-        summaryEl.className = 'validation-summary validation-ok';
-        summaryEl.textContent = withWarnings > 0
-            ? `All ${total} pair(s) are importable. ${withWarnings} have warning(s) to review.`
-            : `All ${total} pair(s) passed validation with no issues.`;
-    } else {
-        summaryEl.className = 'validation-summary validation-blocked';
-        summaryEl.textContent = `${blocked} of ${total} pair(s) blocked by errors and will be skipped. ${total - blocked} pair(s) are ready to import.`;
-    }
-
-    pairResults.forEach(pair => {
-        const li = document.createElement('li');
-        const state = pair.errors.length > 0 ? 'validation-error' : (pair.warnings.length > 0 ? 'validation-warning' : 'validation-pass');
-        li.className = `validation-item pair-validation-item ${state}`;
-
-        const badgeText = pair.errors.length > 0
-            ? `${pair.errors.length} error(s)`
-            : (pair.warnings.length > 0 ? `${pair.warnings.length} warning(s)` : 'Ready');
-
-        const detailItems = [
-            ...pair.errors.map(e => ({ tag: 'Error', component: e.component, message: e.message })),
-            ...pair.warnings.map(w => ({ tag: 'Warning', component: w.component, message: w.message }))
-        ];
-
-        li.innerHTML = `
-            <div class="pair-validation-head">
-                <span class="pair-validation-route">${escapeHtml(pair.sourceName)}<span class="pair-arrow" aria-hidden="true">&rarr;</span>${escapeHtml(pair.targetName)}</span>
-                <span class="validation-tag">${escapeHtml(badgeText)}</span>
-            </div>
-            ${detailItems.length > 0 ? `<ul class="pair-validation-details">${detailItems.map(item => `<li>${escapeHtml(item.tag)}${item.component ? ' &middot; ' + escapeHtml(item.component) : ''}: ${escapeHtml(item.message)}</li>`).join('')}</ul>` : ''}
-        `;
-
-        listEl.appendChild(li);
     });
 }
 

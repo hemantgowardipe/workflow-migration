@@ -130,7 +130,7 @@
                 </div>
 
                 <div class="pair-picker-actions">
-                    <button id="pairSelectAllBtn" class="btn btn-ghost btn-xs" type="button">Select all</button>
+                    <button id="pairSelectAllBtn" class="btn btn-ghost btn-xs" type="button">Select all remaining</button>
                     <button id="pairClearAllBtn" class="btn btn-ghost btn-xs" type="button">Clear all</button>
                     <button id="pairMatchNameBtn" class="btn btn-ghost btn-xs" type="button">Match by name</button>
                     <button id="pairOrderBtn" class="btn btn-ghost btn-xs" type="button">Pair 1-to-1 by order</button>
@@ -205,41 +205,6 @@
                     <span class="track-dot" id="trackDot"></span>
                 </div>
                 <span class="track-label">Target</span>
-            </div>
-
-            <div class="pair-picker">
-                <span class="pair-picker-label">Preview pair (inspect one combination's JSON)</span>
-                <div class="pair-picker-selects">
-                    <select id="previewSourceSelect" class="pair-picker-select" aria-label="Source workflow to preview" disabled>
-                        <option value="">&mdash;</option>
-                    </select>
-                    <span class="pair-arrow" aria-hidden="true">&rarr;</span>
-                    <select id="previewTargetSelect" class="pair-picker-select" aria-label="Target workflow to preview" disabled>
-                        <option value="">&mdash;</option>
-                    </select>
-                </div>
-            </div>
-
-            <button id="generateJsonBtn" class="btn btn-secondary btn-block" type="button" disabled>
-                View / Download Generated JSON
-            </button>
-
-            <div class="advanced-preview">
-                <button id="toggleJsonBtn" class="btn-link hidden" type="button" aria-expanded="false">
-                    Show Transformed JSON
-                </button>
-                <div id="jsonViewerWrap" class="json-viewer-wrap hidden">
-                    <textarea id="jsonViewer" readonly spellcheck="false"></textarea>
-                </div>
-            </div>
-
-            <button id="validateBtn" class="btn btn-secondary btn-block" type="button" disabled>
-                Validate Selected Pairs
-            </button>
-
-            <div id="validationPanel" class="validation-panel hidden">
-                <div id="validationSummary" class="validation-summary"></div>
-                <ul id="validationList" class="validation-list pair-validation-list"></ul>
             </div>
 
             <button id="importBtn" class="btn btn-primary btn-block" type="button" disabled>
@@ -339,10 +304,6 @@
                     <span class="stat-label">Failed</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value" id="successPairsSkipped">0</span>
-                    <span class="stat-label">Skipped</span>
-                </div>
-                <div class="stat">
                     <span class="stat-value" id="successStagesTotal">0</span>
                     <span class="stat-label">Total Stages Migrated</span>
                 </div>
@@ -360,25 +321,6 @@
             <button id="importAnotherBtn" class="btn btn-primary btn-block" type="button">
                 Start New Import
             </button>
-        </div>
-    </div>
-
-    <!-- ============================================= -->
-    <!-- SYSTEM GENERATED JSON MODAL                    -->
-    <!-- ============================================= -->
-    <div id="generatedJsonModal" class="modal-overlay hidden">
-        <div class="modal-card generated-json-card" role="dialog" aria-modal="true" aria-labelledby="generatedJsonTitle">
-            <h3 id="generatedJsonTitle">System generated JSON</h3>
-            <p class="modal-copy">This is the exact payload that would be sent to the target workflow.</p>
-
-            <div id="generatedJsonMeta" class="generated-json-meta"></div>
-
-            <textarea id="generatedJsonViewer" class="generated-json-textarea" readonly spellcheck="false"></textarea>
-
-            <div class="modal-actions modal-actions-split">
-                <button id="downloadGeneratedJsonBtn" class="btn btn-secondary" type="button">Download JSON</button>
-                <button id="closeGeneratedJsonBtn" class="btn btn-primary" type="button">Close</button>
-            </div>
         </div>
     </div>
 

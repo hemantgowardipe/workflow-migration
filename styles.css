@@ -546,27 +546,8 @@ button {
     letter-spacing: 0.03em;
 }
 
-.advanced-preview {
-    border-top: 1px dashed var(--color-border);
-    padding-top: 10px;
-}
-
 .json-viewer-wrap {
     margin-top: 8px;
-}
-
-#jsonViewer {
-    width: 100%;
-    height: 220px;
-    resize: vertical;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 12px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    background: var(--color-ink);
-    color: #D7F4EC;
-    white-space: pre;
 }
 
 /* Transfer track: signature migration motif, reused visually from the step track */
@@ -1097,46 +1078,8 @@ button {
 }
 
 /* =================================================== */
-/* CENTER PANEL: PAIR PICKER (Generate JSON preview)      */
+/* SHARED: PAIR ARROW GLYPH                               */
 /* =================================================== */
-
-.pair-picker {
-    flex-shrink: 0;
-    margin: 4px 0 2px;
-}
-
-.pair-picker-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--color-ink-faint);
-    margin-bottom: 6px;
-}
-
-.pair-picker-selects {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.pair-picker-select {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-alt);
-    color: var(--color-ink);
-    font-size: 13px;
-    font-family: var(--font-body);
-}
-
-.pair-picker-select:disabled {
-    color: var(--color-ink-faint);
-    cursor: not-allowed;
-}
 
 .pair-arrow {
     color: var(--color-flow);
@@ -1267,36 +1210,6 @@ button {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-}
-
-.generated-json-card {
-    max-width: 640px;
-}
-
-.generated-json-meta {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-ink-soft);
-    background: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    margin-bottom: 10px;
-}
-
-.generated-json-textarea {
-    width: 100%;
-    height: 320px;
-    resize: vertical;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 12px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    background: var(--color-ink);
-    color: #D7F4EC;
-    white-space: pre;
-    margin-bottom: 18px;
 }
 
 .modal-actions-split {
@@ -1534,117 +1447,8 @@ button {
 }
 
 /* =================================================== */
-/* VALIDATION PANEL                                      */
+/* AUDIT EXPORT ACTIONS                                   */
 /* =================================================== */
-
-.validation-panel {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 10px;
-    margin: 4px 0;
-    flex-shrink: 0;
-    max-height: 220px;
-    overflow-y: auto;
-}
-
-.validation-summary {
-    font-size: 12.5px;
-    font-weight: 700;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    margin-bottom: 8px;
-}
-
-.validation-summary.validation-ok {
-    background: var(--color-success-soft);
-    color: var(--color-success);
-}
-
-.validation-summary.validation-blocked {
-    background: var(--color-danger-soft);
-    color: var(--color-danger);
-}
-
-.validation-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.validation-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 12px;
-    padding: 8px 9px;
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-}
-
-.validation-item.validation-error {
-    border-color: var(--color-danger);
-    background: var(--color-danger-soft);
-    color: var(--color-danger);
-}
-
-.validation-item.validation-warning {
-    border-color: var(--color-flow);
-    background: var(--color-flow-soft);
-    color: #8a5417;
-}
-
-.validation-tag {
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    opacity: 0.85;
-}
-
-/* Per Source x Target pair rows within the (now cross-product) validation
-   results list. A pair with no errors or warnings gets a neutral "pass"
-   look rather than reusing the warning color. */
-.pair-validation-item.validation-pass {
-    border-color: var(--color-success);
-    background: var(--color-success-soft);
-    color: var(--color-success);
-}
-
-.pair-validation-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.pair-validation-route {
-    font-size: 12.5px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.pair-validation-route .pair-arrow {
-    font-size: 12px;
-}
-
-.pair-validation-details {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-top: 6px;
-    padding-left: 2px;
-    font-size: 11.5px;
-    font-weight: 500;
-    opacity: 0.9;
-}
 
 .audit-export-actions {
     margin-bottom: 12px;

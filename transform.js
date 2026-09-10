@@ -179,183 +179,6 @@ function buildWorkflowMigrationPayload(sourceWorkflow, targetWorkflow) {
 }
 
 /* ============================================= */
-/* DEPENDENCY EXTRACTION (best-effort)            */
-/* ============================================= */
-
-// IMPORTANT LIMITATION: api.js only exposes WorkflowConfigList (read) and a
-// best-guess WorkflowConfigUpdate (write) - there is no documented endpoint
-// for looking up repositories, fields, forms, views, statuses, or
-// users/roles/groups in a tenant. That means this tool has no way to ask
-// the target environment "does this object exist?". Rather than fake that
-// check, extractWorkflowDependencies() only surfaces what the SOURCE
-// workflow references (by scanning StagesConfig for reference-shaped keys),
-// so a human can verify those exist on the target before importing.
-const DEPENDENCY_KEY_PATTERNS = [
-    { test: /repository/i, type: 'Repository' },
-    { test: /field/i, type: 'Field' },
-    { test: /form/i, type: 'Form' },
-    { test: /view/i, type: 'View' },
-    { test: /status/i, type: 'Status' },
-    { test: /role/i, type: 'Role' },
-    { test: /group/i, type: 'Group' },
-    { test: /(user|approver|assignee|owner)/i, type: 'User' },
-    { test: /action/i, type: 'Action' },
-    { test: /trigger/i, type: 'Trigger' },
-    { test: /condition/i, type: 'Condition' },
-    { test: /transition/i, type: 'Transition' },
-    { test: /stage/i, type: 'Stage' }
-];
-
-function classifyDependencyKey(key) {
-    const match = DEPENDENCY_KEY_PATTERNS.find(p => p.test.test(key));
-    return match ? match.type : 'Other';
-}
-
-// A key "looks like" a reference to another object if it ends in Id/Ids/Guid,
-// or is a *Name paired with an identifier concept. WFID/WFName are excluded
-// since those identify the workflow itself, not something it depends on.
-function isReferenceLikeKey(key) {
-    return /(id|ids|guid)$/i.test(key) && !/^wfid$/i.test(key);
-}
-
-function walkForDependencies(node, path, results) {
-    if (node === null || node === undefined) return;
-
-    if (Array.isArray(node)) {
-        node.forEach((item, idx) => walkForDependencies(item, `${path}[${idx}]`, results));
-        return;
-    }
-
-    if (typeof node === 'object') {
-        Object.keys(node).forEach(key => {
-            const value = node[key];
-            const nextPath = path ? `${path}.${key}` : key;
-
-            if (value !== null && typeof value === 'object') {
-                walkForDependencies(value, nextPath, results);
-                return;
-            }
-
-            if (isReferenceLikeKey(key) && value !== '' && value !== null && value !== undefined) {
-                results.push({
-                    type: classifyDependencyKey(key),
-                    key,
-                    value,
-                    path: nextPath
-                });
-            }
-        });
-    }
-}
-
-// Extracts every reference-like field found in a workflow's StagesConfig.
-// Falls back to scanning the whole workflow object if StagesConfig is
-// missing/empty, so nothing is silently skipped.
-function extractWorkflowDependencies(workflow) {
-    const results = [];
-    const stages = getStagesConfigArray(workflow);
-    const target = (stages && stages.length > 0) ? stages : workflow;
-    walkForDependencies(target, 'StagesConfig', results);
-    return results;
-}
-
-/* ============================================= */
-/* COMPATIBILITY VALIDATION (best-effort)         */
-/* ============================================= */
-
-// Returns { errors, warnings, dependencies }. `errors` are things this tool
-// CAN actually confirm are broken (structural problems in the loaded data)
-// and should block migration. `warnings` include every dependency reference
-// found, since - per the limitation above - this tool cannot confirm those
-// objects exist in the target tenant and the person should check manually.
-function validateWorkflowCompatibility(sourceWorkflow, targetWorkflow) {
-    const errors = [];
-    const warnings = [];
-
-    if (!sourceWorkflow) {
-        errors.push({ component: 'Source', message: 'No source workflow is loaded.' });
-        return { errors, warnings, dependencies: [] };
-    }
-
-    if (!targetWorkflow) {
-        errors.push({ component: 'Target', message: 'No target workflow is loaded.' });
-        return { errors, warnings, dependencies: [] };
-    }
-
-    const rawStages = getProp(sourceWorkflow, 'StagesConfig');
-    const stages = getStagesConfigArray(sourceWorkflow);
-    const declaredStageCount = Number(getProp(sourceWorkflow, 'NumberOfStages'));
-
-    if (!stages || stages.length === 0) {
-        // Distinguish "present but a string that failed to parse as an
-        // array at all" (genuinely malformed) from "missing, or present but
-        // empty" (valid data, just nothing to migrate) so the error message
-        // doesn't send someone hunting for data that's actually there.
-        let unparsable = false;
-        if (typeof rawStages === 'string' && rawStages.trim() !== '') {
-            try {
-                unparsable = !Array.isArray(JSON.parse(rawStages));
-            } catch (parseError) {
-                unparsable = true;
-            }
-        }
-        const message = unparsable
-            ? 'Source workflow has a StagesConfig value, but it could not be parsed as an array - there is no workflow logic to migrate.'
-            : 'Source workflow has no StagesConfig - there is no workflow logic to migrate.';
-        errors.push({ component: 'StagesConfig', message });
-    } else if (!Number.isNaN(declaredStageCount) && declaredStageCount !== stages.length) {
-        warnings.push({
-            component: 'NumberOfStages',
-            message: `Source's declared NumberOfStages (${declaredStageCount}) doesn't match its actual StagesConfig length (${stages.length}).`
-        });
-    }
-
-    if (!getProp(targetWorkflow, 'WFID')) {
-        errors.push({ component: 'WFID', message: "Target workflow is missing a WFID, so it can't be identified for update." });
-    }
-
-    if (!getProp(targetWorkflow, 'WFName')) {
-        warnings.push({ component: 'WFName', message: 'Target workflow has no WFName set.' });
-    }
-
-    const dependencies = extractWorkflowDependencies(sourceWorkflow);
-
-    if (dependencies.length > 0) {
-        warnings.push({
-            component: 'Dependencies',
-            message: `Found ${dependencies.length} reference(s) inside the source workflow (repositories, fields, forms, views, statuses, users/roles/groups, etc). This tool has no API access to the target tenant's object directory, so these could not be automatically confirmed to exist there - please verify manually before importing.`
-        });
-    }
-
-    return { errors, warnings, dependencies };
-}
-
-/* ============================================= */
-/* MULTI-SELECT: PER-PAIR VALIDATION              */
-/* ============================================= */
-
-// Wraps validateWorkflowCompatibility() with one extra check that only
-// matters once multiple sources/targets can be combined freely: migrating a
-// workflow into itself. This is legal (same tenant, same WFID chosen on
-// both sides) but almost always a mistake, so it's surfaced as a warning
-// rather than an error - it doesn't block the pair, it just flags it.
-function validateWorkflowPair(sourceWorkflow, targetWorkflow) {
-    const result = validateWorkflowCompatibility(sourceWorkflow, targetWorkflow);
-
-    const sourceWFID = getProp(sourceWorkflow, 'WFID');
-    const targetWFID = getProp(targetWorkflow, 'WFID');
-
-    if (sourceWFID && targetWFID && sourceWFID === targetWFID) {
-        result.warnings.push({
-            component: 'Self-import',
-            message: 'Source and Target are the same workflow (identical WFID). This will overwrite the workflow with its own current configuration, aside from re-applying target-owned fields.'
-        });
-    }
-
-    return result;
-}
-
-/* ============================================= */
 /* MIGRATION SUMMARY / AUDIT REPORT               */
 /* ============================================= */
 
@@ -364,9 +187,6 @@ function buildMigrationSummary({
     targetWorkflow,
     stageCount,
     triggerType,
-    dependencies,
-    warnings,
-    errors,
     status,
     errorMessage
 }) {
@@ -375,10 +195,6 @@ function buildMigrationSummary({
         targetWorkflowName: workflowDisplayName(targetWorkflow),
         actionsMigrated: stageCount || 0,
         triggerMethod: triggerType || 'Unknown',
-        dependenciesFound: (dependencies || []).length,
-        dependenciesMapped: 0, // see README note in code: no target directory endpoint exists to remap IDs against
-        validationWarnings: (warnings || []).map(w => w.message),
-        validationErrors: (errors || []).map(e => e.message),
         transformationStatus: status,
         errorMessage: errorMessage || null,
         migrationTimestamp: new Date().toISOString()
@@ -395,27 +211,11 @@ function formatMigrationSummaryAsText(summary) {
         `Target Workflow: ${summary.targetWorkflowName}`,
         `Stages / Actions Migrated: ${summary.actionsMigrated}`,
         `Trigger Method: ${summary.triggerMethod}`,
-        `Dependencies Found: ${summary.dependenciesFound}`,
-        `Dependencies Auto-Mapped: ${summary.dependenciesMapped} (no target directory endpoint available - manual verification required)`,
         ''
     ];
 
     if (summary.errorMessage) {
         lines.push(`Error: ${summary.errorMessage}`, '');
-    }
-
-    lines.push(`Validation Errors (${summary.validationErrors.length}):`);
-    if (summary.validationErrors.length === 0) {
-        lines.push('  (none)');
-    } else {
-        summary.validationErrors.forEach(msg => lines.push(`  - ${msg}`));
-    }
-
-    lines.push('', `Validation Warnings (${summary.validationWarnings.length}):`);
-    if (summary.validationWarnings.length === 0) {
-        lines.push('  (none)');
-    } else {
-        summary.validationWarnings.forEach(msg => lines.push(`  - ${msg}`));
     }
 
     return lines.join('\n');
@@ -427,9 +227,9 @@ function formatMigrationSummaryAsText(summary) {
 
 // The multi-select Source x Target flow can run many pairs in one import
 // action. `pairSummaries` is an array of the same per-pair objects produced
-// by buildMigrationSummary() above (one per source/target pair, including
-// skipped ones) - this just wraps them with an overall roll-up so the
-// export still reads as one coherent report instead of a bare array.
+// by buildMigrationSummary() above (one per source/target pair) - this
+// just wraps them with an overall roll-up so the export still reads as one
+// coherent report instead of a bare array.
 function buildBulkMigrationSummary(pairSummaries) {
     const list = pairSummaries || [];
 
@@ -438,7 +238,6 @@ function buildBulkMigrationSummary(pairSummaries) {
         totalPairs: list.length,
         succeeded: list.filter(p => p.transformationStatus === 'success').length,
         failed: list.filter(p => p.transformationStatus === 'failed').length,
-        skipped: list.filter(p => p.transformationStatus === 'skipped').length,
         totalStagesMigrated: list.reduce((sum, p) => sum + (p.actionsMigrated || 0), 0),
         pairs: list
     };
@@ -452,7 +251,6 @@ function formatBulkMigrationSummaryAsText(bulkSummary) {
         `Total Pairs: ${bulkSummary.totalPairs}`,
         `Succeeded: ${bulkSummary.succeeded}`,
         `Failed: ${bulkSummary.failed}`,
-        `Skipped (validation errors): ${bulkSummary.skipped}`,
         `Total Stages / Actions Migrated: ${bulkSummary.totalStagesMigrated}`,
         ''
     ];
