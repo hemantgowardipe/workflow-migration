@@ -34,7 +34,6 @@ const closeUploadedJsonEditorBtn = document.getElementById('closeUploadedJsonEdi
 const exportSummaryJsonBtn = document.getElementById('exportSummaryJsonBtn');
 const exportSummaryTextBtn = document.getElementById('exportSummaryTextBtn');
 
-const summaryEmpty = document.getElementById('summaryEmpty');
 const summaryCard = document.getElementById('summaryCard');
 const summaryPairCount = document.getElementById('summaryPairCount');
 const pairSourceSearch = document.getElementById('pairSourceSearch');
@@ -48,8 +47,6 @@ const focusedSourceName = document.getElementById('focusedSourceName');
 const statStages = document.getElementById('statStages');
 const statTrigger = document.getElementById('statTrigger');
 const statType = document.getElementById('statType');
-
-const previewBtn = document.getElementById('previewBtn');
 
 const importBtn = document.getElementById('importBtn');
 const trackDot = document.getElementById('trackDot');
@@ -159,15 +156,6 @@ if (document.readyState === 'loading') {
 }
 
 refreshBtn.addEventListener('click', loadWorkflows);
-
-previewBtn.addEventListener('click', () => {
-    if (!focusedSourceId) {
-        showToast('Select a source workflow chip to preview.', 'error');
-        return;
-    }
-    renderFocusedSourceSummary();
-    showToast('Preview refreshed.', 'success');
-});
 
 exportSummaryJsonBtn.addEventListener('click', () => {
     if (!lastBulkSummary) return;
@@ -676,13 +664,11 @@ function renderFocusedSourceSummary() {
     const entry = sourceEntries.find(e => e.id === focusedSourceId);
 
     if (!entry) {
-        summaryEmpty.classList.remove('hidden');
         summaryCard.classList.add('hidden');
         uploadedJsonEditorWrap.classList.add('hidden');
         return;
     }
 
-    summaryEmpty.classList.add('hidden');
     summaryCard.classList.remove('hidden');
 
     focusedSourceName.textContent = entry.loading

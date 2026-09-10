@@ -472,28 +472,6 @@ button {
 /* CENTER: SUMMARY / PREVIEW                             */
 /* =================================================== */
 
-.empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--color-ink-faint);
-    text-align: center;
-    padding: 20px;
-}
-
-.empty-icon {
-    font-size: 28px;
-    opacity: 0.6;
-}
-
-.empty-state p {
-    font-size: 13px;
-    max-width: 260px;
-}
-
 .summary-card {
     display: flex;
     flex-direction: column;
