@@ -388,15 +388,38 @@ sourceSearchInput.addEventListener('keydown', (e) => {
     }
 });
 
+// Clears a search field's autocomplete state completely: the input text,
+// the dropdown's DOM, AND the underlying matches array/highlight index.
+// hideAutocompleteDropdown() alone only clears the visible dropdown - the
+// matches array it was built from would otherwise survive untouched, so a
+// later click on "Add" (with nothing newly typed) would silently reuse
+// that stale array and re-add whatever was last matched, even after that
+// same workflow had since been removed as a chip. Every place that
+// commits a selection or dismisses the dropdown must go through this
+// (or its target-side twin) instead of calling hideAutocompleteDropdown
+// directly, or the same staleness bug creeps back in.
+function clearSourceAutocomplete() {
+    sourceSearchInput.value = '';
+    sourceAutocompleteMatches = [];
+    sourceHighlightIndex = -1;
+    hideAutocompleteDropdown(sourceAutocompleteList);
+}
+
+function clearTargetAutocomplete() {
+    targetSearchInput.value = '';
+    targetAutocompleteMatches = [];
+    targetHighlightIndex = -1;
+    hideAutocompleteDropdown(targetAutocompleteList);
+}
+
 sourceAutocompleteList.addEventListener('click', (e) => {
     const item = e.target.closest('.autocomplete-item');
     if (!item) return;
     const match = sourceAutocompleteMatches[Number(item.dataset.index)];
     if (match) {
         addSourceWorkflow(match);
-        sourceSearchInput.value = '';
+        clearSourceAutocomplete();
         sourceSearchInput.focus();
-        hideAutocompleteDropdown(sourceAutocompleteList);
     }
 });
 
@@ -408,8 +431,7 @@ function commitSourceAutocompleteSelection() {
         const match = sourceAutocompleteMatches[index];
         if (match) {
             addSourceWorkflow(match);
-            sourceSearchInput.value = '';
-            hideAutocompleteDropdown(sourceAutocompleteList);
+            clearSourceAutocomplete();
         }
         return;
     }
@@ -429,7 +451,7 @@ function commitSourceAutocompleteSelection() {
     }
 
     addSourceWorkflow(exact);
-    sourceSearchInput.value = '';
+    clearSourceAutocomplete();
 }
 
 targetSearchInput.addEventListener('input', () => {
@@ -470,9 +492,8 @@ targetAutocompleteList.addEventListener('click', (e) => {
     const match = targetAutocompleteMatches[Number(item.dataset.index)];
     if (match) {
         addTargetWorkflow(match);
-        targetSearchInput.value = '';
+        clearTargetAutocomplete();
         targetSearchInput.focus();
-        hideAutocompleteDropdown(targetAutocompleteList);
     }
 });
 
@@ -484,8 +505,7 @@ function commitTargetAutocompleteSelection() {
         const match = targetAutocompleteMatches[index];
         if (match) {
             addTargetWorkflow(match);
-            targetSearchInput.value = '';
-            hideAutocompleteDropdown(targetAutocompleteList);
+            clearTargetAutocomplete();
         }
         return;
     }
@@ -505,10 +525,13 @@ function commitTargetAutocompleteSelection() {
     }
 
     addTargetWorkflow(exact);
-    targetSearchInput.value = '';
+    clearTargetAutocomplete();
 }
 
-// Clicking outside either autocomplete field/dropdown closes it.
+// Clicking outside either autocomplete field/dropdown closes it. This
+// deliberately does NOT clear the matches arrays - the person may just be
+// glancing away mid-search and clicking back in should still show what
+// they'd already typed, not force them to retype it.
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.autocomplete-input-wrap')) {
         hideAutocompleteDropdown(sourceAutocompleteList);
@@ -1347,10 +1370,8 @@ function resetForNewImport() {
 
     lastBulkSummary = null;
 
-    sourceSearchInput.value = '';
-    targetSearchInput.value = '';
-    hideAutocompleteDropdown(sourceAutocompleteList);
-    hideAutocompleteDropdown(targetAutocompleteList);
+    clearSourceAutocomplete();
+    clearTargetAutocomplete();
 
     uploadedJsonEditorWrap.classList.add('hidden');
     uploadedJsonEditor.value = '';
