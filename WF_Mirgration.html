@@ -102,9 +102,7 @@
             <div id="sourceStatus" class="list-status hidden"></div>
 
             <div class="chip-list-label">Selected Sources (<span id="sourceCount">0</span>)</div>
-            <div id="workflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected source workflows" aria-multiselectable="true">
-                <div class="empty-message">Type a workflow name above to search, pick from the suggestions, or upload a JSON file.</div>
-            </div>
+            <div id="workflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected source workflows" aria-multiselectable="true"></div>
 
             <div id="uploadedJsonEditorWrap" class="uploaded-json-editor hidden">
                 <div class="uploaded-json-editor-head">
@@ -129,13 +127,6 @@
                     <span class="pair-matrix-title">Select Source &rarr; Target Pairs</span>
                 </div>
 
-                <div class="pair-picker-actions">
-                    <button id="pairSelectAllBtn" class="btn btn-ghost btn-xs" type="button">Select all remaining</button>
-                    <button id="pairClearAllBtn" class="btn btn-ghost btn-xs" type="button">Clear all</button>
-                    <button id="pairMatchNameBtn" class="btn btn-ghost btn-xs" type="button">Match by name</button>
-                    <button id="pairOrderBtn" class="btn btn-ghost btn-xs" type="button">Pair 1-to-1 by order</button>
-                </div>
-
                 <div class="pair-master-detail">
                     <div class="pair-master-col">
                         <div class="pair-col-label">Sources</div>
@@ -148,10 +139,6 @@
                     <div class="pair-detail-col">
                         <div class="pair-col-label" id="pairTargetHeading">Targets</div>
                         <input type="text" id="pairTargetSearch" class="search-input pair-mini-search" placeholder="Search targets..." autocomplete="off" />
-                        <div class="pair-row-actions">
-                            <button id="pairCheckVisibleBtn" class="btn btn-ghost btn-xs" type="button">Check visible</button>
-                            <button id="pairUncheckVisibleBtn" class="btn btn-ghost btn-xs" type="button">Uncheck visible</button>
-                        </div>
                         <div id="pairTargetListContainer" class="pair-target-list" aria-label="Targets for the focused source">
                             <div class="empty-message">Pick a Source on the left to choose its Targets.</div>
                         </div>
@@ -255,9 +242,7 @@
             <div id="targetStatus" class="list-status hidden"></div>
 
             <div class="chip-list-label">Selected Targets (<span id="targetCount">0</span>)</div>
-            <div id="targetWorkflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected target workflows" aria-multiselectable="true">
-                <div class="empty-message">Type a workflow name above to search and pick from the suggestions.</div>
-            </div>
+            <div id="targetWorkflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected target workflows" aria-multiselectable="true"></div>
         </section>
 
     </main>

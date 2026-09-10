@@ -873,18 +873,6 @@ button {
     color: var(--color-ink-faint);
 }
 
-.pair-picker-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
-}
-
-.btn-xs {
-    padding: 6px 10px;
-    font-size: 11.5px;
-}
-
 .pair-master-detail {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -918,16 +906,6 @@ button {
     margin-bottom: 8px;
     padding: 6px 9px;
     font-size: 12px;
-}
-
-.pair-row-actions {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 8px;
-}
-
-.pair-row-actions .btn-xs {
-    flex: 1;
 }
 
 .pair-source-list,

@@ -37,17 +37,11 @@ const exportSummaryTextBtn = document.getElementById('exportSummaryTextBtn');
 const summaryEmpty = document.getElementById('summaryEmpty');
 const summaryCard = document.getElementById('summaryCard');
 const summaryPairCount = document.getElementById('summaryPairCount');
-const pairSelectAllBtn = document.getElementById('pairSelectAllBtn');
-const pairClearAllBtn = document.getElementById('pairClearAllBtn');
-const pairMatchNameBtn = document.getElementById('pairMatchNameBtn');
-const pairOrderBtn = document.getElementById('pairOrderBtn');
 const pairSourceSearch = document.getElementById('pairSourceSearch');
 const pairTargetSearch = document.getElementById('pairTargetSearch');
 const pairSourceListContainer = document.getElementById('pairSourceListContainer');
 const pairTargetListContainer = document.getElementById('pairTargetListContainer');
 const pairTargetHeading = document.getElementById('pairTargetHeading');
-const pairCheckVisibleBtn = document.getElementById('pairCheckVisibleBtn');
-const pairUncheckVisibleBtn = document.getElementById('pairUncheckVisibleBtn');
 const pairReviewToggleBtn = document.getElementById('pairReviewToggleBtn');
 const pairReviewList = document.getElementById('pairReviewList');
 const focusedSourceName = document.getElementById('focusedSourceName');
@@ -659,8 +653,7 @@ function renderSourcePanel() {
     renderChipList(workflowContainer, sourceEntries, {
         onRemove: removeSourceEntry,
         onFocus: focusSourceEntry,
-        focusedId: focusedSourceId,
-        emptyMessage: 'Type a workflow name above to search, pick from the suggestions, or upload a JSON file.'
+        focusedId: focusedSourceId
     });
 
     sourceCountEl.textContent = String(sourceEntries.length);
@@ -760,8 +753,7 @@ function removeTargetEntry(id) {
 
 function renderTargetPanel() {
     renderChipList(targetWorkflowContainer, targetEntries, {
-        onRemove: removeTargetEntry,
-        emptyMessage: 'Type a workflow name above to search and pick from the suggestions.'
+        onRemove: removeTargetEntry
     });
 
     targetCountEl.textContent = String(targetEntries.length);
@@ -1114,125 +1106,6 @@ pairSourceSearch.addEventListener('input', () => {
 pairTargetSearch.addEventListener('input', () => {
     pairTargetFilter = pairTargetSearch.value;
     renderPairOverview();
-});
-
-// Renamed from a plain "select everything" now that a Target can only
-// belong to one Source: this assigns every currently-unclaimed Target to
-// whichever Source is focused, ignoring the search filter (unlike "Check
-// visible", which only affects filtered rows). With a single Source
-// selected this is equivalent to the old "select all".
-pairSelectAllBtn.addEventListener('click', () => {
-    if (!pairFocusedSourceId) {
-        showToast('Pick a Source in the list first.', 'error');
-        return;
-    }
-
-    const owners = syncPairSelection();
-    const available = getAvailableTargetsForSource(pairFocusedSourceId, owners);
-    available.forEach(t => selectedPairKeys.add(pairKey(pairFocusedSourceId, t.id)));
-
-    renderPairOverview();
-    updateActionAvailability();
-    showToast(`Assigned ${available.length} remaining target(s) to this source.`, 'success');
-});
-
-pairClearAllBtn.addEventListener('click', () => {
-    selectedPairKeys.clear();
-
-    renderPairOverview();
-    updateActionAvailability();
-    showToast('All pairs cleared.', 'info');
-});
-
-// Replaces the current selection with pairs whose Source and Target names
-// correspond - checked against both WFName (internal name) and AppTitle
-// (display name) on each side, case-insensitively, since either field
-// might be the one that actually lines up between two tenants/environments.
-// Sources are matched in list order, and a Target already claimed by an
-// earlier match is skipped for later Sources - a Target can only belong to
-// one Source.
-pairMatchNameBtn.addEventListener('click', () => {
-    const loadedSources = sourceEntries.filter(e => !e.loading);
-    selectedPairKeys.clear();
-
-    const claimed = new Set();
-    let matchCount = 0;
-
-    loadedSources.forEach(s => {
-        const sourceNames = [s.workflow.WFName, s.workflow.AppTitle]
-            .filter(Boolean)
-            .map(n => n.toLowerCase());
-
-        if (sourceNames.length === 0) return;
-
-        targetEntries.forEach(t => {
-            if (claimed.has(t.id)) return;
-
-            const targetNames = [t.workflow.WFName, t.workflow.AppTitle]
-                .filter(Boolean)
-                .map(n => n.toLowerCase());
-
-            const isMatch = sourceNames.some(sn => targetNames.includes(sn));
-            if (isMatch) {
-                selectedPairKeys.add(pairKey(s.id, t.id));
-                claimed.add(t.id);
-                matchCount += 1;
-            }
-        });
-    });
-
-    renderPairOverview();
-    updateActionAvailability();
-    showToast(
-        matchCount > 0 ? `Matched ${matchCount} pair(s) by name.` : 'No matching names found between Sources and Targets.',
-        matchCount > 0 ? 'success' : 'info'
-    );
-});
-
-// Replaces the current selection with each Source paired to the Target at
-// the same position in its list - useful when the two lists were built in
-// a corresponding order (e.g. promoting a batch from dev to staging). Each
-// Target index is used at most once, so this is inherently safe under the
-// one-Source-per-Target rule.
-pairOrderBtn.addEventListener('click', () => {
-    const loadedSources = sourceEntries.filter(e => !e.loading);
-    selectedPairKeys.clear();
-
-    const count = Math.min(loadedSources.length, targetEntries.length);
-    for (let i = 0; i < count; i++) {
-        selectedPairKeys.add(pairKey(loadedSources[i].id, targetEntries[i].id));
-    }
-
-    renderPairOverview();
-    updateActionAvailability();
-    showToast(`Paired ${count} Source(s) to Target(s) by list order.`, 'success');
-});
-
-// "Check/uncheck visible" act only on whichever Targets the current search
-// filter is showing for the focused Source (which already excludes Targets
-// claimed by a different Source) - lets someone narrow to a handful of
-// Targets by name and bulk-toggle just those.
-pairCheckVisibleBtn.addEventListener('click', () => {
-    if (!pairFocusedSourceId) return;
-
-    const owners = syncPairSelection();
-    getAvailableTargetsForSource(pairFocusedSourceId, owners)
-        .filter(t => matchesFilter(t.workflow, pairTargetFilter))
-        .forEach(t => selectedPairKeys.add(pairKey(pairFocusedSourceId, t.id)));
-
-    renderPairOverview();
-    updateActionAvailability();
-});
-
-pairUncheckVisibleBtn.addEventListener('click', () => {
-    if (!pairFocusedSourceId) return;
-
-    targetEntries
-        .filter(t => matchesFilter(t.workflow, pairTargetFilter))
-        .forEach(t => selectedPairKeys.delete(pairKey(pairFocusedSourceId, t.id)));
-
-    renderPairOverview();
-    updateActionAvailability();
 });
 
 pairReviewToggleBtn.addEventListener('click', () => {

@@ -111,7 +111,7 @@ function renderChipList(containerEl, entries, options) {
     const opts = options || {};
 
     if (!entries || entries.length === 0) {
-        containerEl.innerHTML = `<div class="empty-message">${escapeHtml(opts.emptyMessage || 'No workflows selected.')}</div>`;
+        containerEl.innerHTML = opts.emptyMessage ? `<div class="empty-message">${escapeHtml(opts.emptyMessage)}</div>` : '';
         return;
     }
 
