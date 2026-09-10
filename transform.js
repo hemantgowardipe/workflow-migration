@@ -331,6 +331,31 @@ function validateWorkflowCompatibility(sourceWorkflow, targetWorkflow) {
 }
 
 /* ============================================= */
+/* MULTI-SELECT: PER-PAIR VALIDATION              */
+/* ============================================= */
+
+// Wraps validateWorkflowCompatibility() with one extra check that only
+// matters once multiple sources/targets can be combined freely: migrating a
+// workflow into itself. This is legal (same tenant, same WFID chosen on
+// both sides) but almost always a mistake, so it's surfaced as a warning
+// rather than an error - it doesn't block the pair, it just flags it.
+function validateWorkflowPair(sourceWorkflow, targetWorkflow) {
+    const result = validateWorkflowCompatibility(sourceWorkflow, targetWorkflow);
+
+    const sourceWFID = getProp(sourceWorkflow, 'WFID');
+    const targetWFID = getProp(targetWorkflow, 'WFID');
+
+    if (sourceWFID && targetWFID && sourceWFID === targetWFID) {
+        result.warnings.push({
+            component: 'Self-import',
+            message: 'Source and Target are the same workflow (identical WFID). This will overwrite the workflow with its own current configuration, aside from re-applying target-owned fields.'
+        });
+    }
+
+    return result;
+}
+
+/* ============================================= */
 /* MIGRATION SUMMARY / AUDIT REPORT               */
 /* ============================================= */
 
@@ -392,6 +417,51 @@ function formatMigrationSummaryAsText(summary) {
     } else {
         summary.validationWarnings.forEach(msg => lines.push(`  - ${msg}`));
     }
+
+    return lines.join('\n');
+}
+
+/* ============================================= */
+/* BULK MIGRATION SUMMARY / AUDIT REPORT          */
+/* ============================================= */
+
+// The multi-select Source x Target flow can run many pairs in one import
+// action. `pairSummaries` is an array of the same per-pair objects produced
+// by buildMigrationSummary() above (one per source/target pair, including
+// skipped ones) - this just wraps them with an overall roll-up so the
+// export still reads as one coherent report instead of a bare array.
+function buildBulkMigrationSummary(pairSummaries) {
+    const list = pairSummaries || [];
+
+    return {
+        migrationTimestamp: new Date().toISOString(),
+        totalPairs: list.length,
+        succeeded: list.filter(p => p.transformationStatus === 'success').length,
+        failed: list.filter(p => p.transformationStatus === 'failed').length,
+        skipped: list.filter(p => p.transformationStatus === 'skipped').length,
+        totalStagesMigrated: list.reduce((sum, p) => sum + (p.actionsMigrated || 0), 0),
+        pairs: list
+    };
+}
+
+function formatBulkMigrationSummaryAsText(bulkSummary) {
+    const lines = [
+        'WORKFLOW MIGRATION - BULK AUDIT REPORT',
+        '=======================================',
+        `Timestamp: ${bulkSummary.migrationTimestamp}`,
+        `Total Pairs: ${bulkSummary.totalPairs}`,
+        `Succeeded: ${bulkSummary.succeeded}`,
+        `Failed: ${bulkSummary.failed}`,
+        `Skipped (validation errors): ${bulkSummary.skipped}`,
+        `Total Stages / Actions Migrated: ${bulkSummary.totalStagesMigrated}`,
+        ''
+    ];
+
+    bulkSummary.pairs.forEach((pair, idx) => {
+        lines.push(`--- Pair ${idx + 1} of ${bulkSummary.pairs.length} ---`);
+        lines.push(formatMigrationSummaryAsText(pair));
+        lines.push('');
+    });
 
     return lines.join('\n');
 }

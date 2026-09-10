@@ -700,30 +700,255 @@ button {
     font-weight: 600;
 }
 
-/* =================================================== */
-/* RIGHT: TARGET SELECTION                                */
-/* =================================================== */
-
-.selected-target-card {
-    flex-shrink: 0;
-    margin-top: 12px;
-    border-top: 1px solid var(--color-border);
-    padding-top: 12px;
+.progress-item.skipped .progress-marker {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-alt);
+    color: var(--color-ink-faint);
 }
 
-.selected-target-label {
+.progress-item.skipped {
+    color: var(--color-ink-faint);
+    font-style: italic;
+}
+
+/* =================================================== */
+/* MULTI-SELECT: AUTOCOMPLETE DROPDOWN                    */
+/* =================================================== */
+
+.autocomplete-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
+.autocomplete-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 20;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 4px;
+}
+
+.autocomplete-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+    background: var(--color-accent-soft);
+}
+
+.autocomplete-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.autocomplete-item-id {
+    font-size: 11px;
+    color: var(--color-ink-faint);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* =================================================== */
+/* MULTI-SELECT: CHIP LIST (Selected Sources/Targets)     */
+/* =================================================== */
+
+.chip-list-label {
+    flex-shrink: 0;
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--color-ink-faint);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
-.selected-target-name {
+.chip-list {
+    /* Chip lists can grow with the selection instead of being pinned to a
+       fixed height like the old single-result list, but keep a sane cap so
+       a large selection still scrolls rather than pushing the layout out. */
+    height: auto;
+    max-height: 360px;
+}
+
+.chip-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.chip-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+}
+
+.chip-row-loading {
+    opacity: 0.65;
+}
+
+.chip-remove-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-ink-faint);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chip-remove-btn:hover:not(:disabled) {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+.chip-remove-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* =================================================== */
+/* CENTER PANEL: PAIR COUNT / FOCUSED PREVIEW             */
+/* =================================================== */
+
+.summary-pair-count {
+    font-family: var(--font-display);
     font-size: 14px;
+    font-weight: 700;
+    color: var(--color-ink);
+    background: var(--color-accent-soft);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    margin-bottom: 12px;
+}
+
+.focused-source-block {
+    border-top: 1px dashed var(--color-border);
+    padding-top: 12px;
+}
+
+.focused-source-label {
+    font-size: 12.5px;
+    color: var(--color-ink-soft);
+    margin-bottom: 8px;
+}
+
+.focused-source-label #focusedSourceName {
+    font-weight: 700;
+    color: var(--color-ink);
+}
+
+/* =================================================== */
+/* CENTER PANEL: PAIR PICKER (Generate JSON preview)      */
+/* =================================================== */
+
+.pair-picker {
+    flex-shrink: 0;
+    margin: 4px 0 2px;
+}
+
+.pair-picker-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-ink-faint);
+    margin-bottom: 6px;
+}
+
+.pair-picker-selects {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pair-picker-select {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    color: var(--color-ink);
+    font-size: 13px;
+    font-family: var(--font-body);
+}
+
+.pair-picker-select:disabled {
+    color: var(--color-ink-faint);
+    cursor: not-allowed;
+}
+
+.pair-arrow {
+    color: var(--color-flow);
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+/* =================================================== */
+/* CONFIRM MODAL: BULK PAIR LIST                          */
+/* =================================================== */
+
+.confirm-pair-summary {
+    font-size: 13.5px;
     font-weight: 600;
     color: var(--color-ink);
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.confirm-pair-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.confirm-pair-list li {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-ink-soft);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 7px 9px;
+}
+
+.success-stats-wide {
+    grid-template-columns: repeat(3, 1fr);
+    row-gap: 14px;
 }
 
 /* =================================================== */
@@ -1143,6 +1368,49 @@ button {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     opacity: 0.85;
+}
+
+/* Per Source x Target pair rows within the (now cross-product) validation
+   results list. A pair with no errors or warnings gets a neutral "pass"
+   look rather than reusing the warning color. */
+.pair-validation-item.validation-pass {
+    border-color: var(--color-success);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.pair-validation-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pair-validation-route {
+    font-size: 12.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pair-validation-route .pair-arrow {
+    font-size: 12px;
+}
+
+.pair-validation-details {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+    padding-left: 2px;
+    font-size: 11.5px;
+    font-weight: 500;
+    opacity: 0.9;
 }
 
 .audit-export-actions {

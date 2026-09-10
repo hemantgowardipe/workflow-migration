@@ -24,14 +24,14 @@
             </div>
             <div>
                 <h1>Workflow Migration Tool</h1>
-                <p class="subtitle">Copy a workflow configuration from one workflow to another.</p>
+                <p class="subtitle">Copy workflow configurations from one or more Source workflows into one or more Target workflows.</p>
             </div>
         </div>
 
         <ol class="step-track" id="stepTrack">
             <li class="step-node" data-step="1">
                 <span class="step-num">1</span>
-                <span class="step-label">Choose Source</span>
+                <span class="step-label">Choose Sources</span>
             </li>
             <li class="step-connector"></li>
             <li class="step-node" data-step="2">
@@ -41,7 +41,7 @@
             <li class="step-connector"></li>
             <li class="step-node" data-step="3">
                 <span class="step-num">3</span>
-                <span class="step-label">Choose Target</span>
+                <span class="step-label">Choose Targets</span>
             </li>
             <li class="step-connector"></li>
             <li class="step-node" data-step="4">
@@ -59,7 +59,7 @@
         <!-- LEFT: SOURCE WORKFLOW -->
         <section class="panel panel-source" aria-labelledby="sourceHeading">
             <div class="panel-head">
-                <h2 id="sourceHeading">Source Workflow</h2>
+                <h2 id="sourceHeading">Source Workflows</h2>
                 <button id="refreshBtn" class="btn btn-ghost" type="button">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -70,14 +70,20 @@
             </div>
 
             <div class="search-wrap search-wrap-row">
-                <input
-                    type="text"
-                    id="sourceSearchInput"
-                    class="search-input"
-                    placeholder="Search by internal name (WFName)..."
-                    autocomplete="off"
-                />
-                <button id="sourceSearchBtn" class="btn btn-secondary" type="button">Search</button>
+                <div class="autocomplete-input-wrap">
+                    <input
+                        type="text"
+                        id="sourceSearchInput"
+                        class="search-input"
+                        placeholder="Type a workflow name to search..."
+                        autocomplete="off"
+                        role="combobox"
+                        aria-expanded="false"
+                        aria-autocomplete="list"
+                    />
+                    <div id="sourceAutocompleteList" class="autocomplete-list hidden" role="listbox" aria-label="Source workflow suggestions"></div>
+                </div>
+                <button id="sourceSearchBtn" class="btn btn-secondary" type="button">Add</button>
             </div>
 
             <div class="source-file-actions">
@@ -95,14 +101,15 @@
 
             <div id="sourceStatus" class="list-status hidden"></div>
 
-            <div id="workflowContainer" class="repo-list" role="listbox" aria-label="Source workflows">
-                <div class="empty-message">Search for a workflow by its internal name (WFName), or upload a JSON file.</div>
+            <div class="chip-list-label">Selected Sources (<span id="sourceCount">0</span>)</div>
+            <div id="workflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected source workflows" aria-multiselectable="true">
+                <div class="empty-message">Type a workflow name above to search, pick from the suggestions, or upload a JSON file.</div>
             </div>
 
             <div id="uploadedJsonEditorWrap" class="uploaded-json-editor hidden">
                 <div class="uploaded-json-editor-head">
-                    <span>Uploaded source JSON</span>
-                    <button id="useFetchedSourceBtn" class="btn-link" type="button">Use fetched workflow instead</button>
+                    <span id="uploadedJsonEditorLabel">Editing uploaded source JSON</span>
+                    <button id="closeUploadedJsonEditorBtn" class="btn-link" type="button">Close editor</button>
                 </div>
                 <textarea id="uploadedJsonEditor" spellcheck="false"></textarea>
                 <button id="saveUploadedJsonBtn" class="btn btn-secondary btn-block" type="button">Save Changes</button>
@@ -117,30 +124,34 @@
 
             <div id="summaryEmpty" class="empty-state">
                 <div class="empty-icon" aria-hidden="true">&#128193;</div>
-                <p>Select a source workflow to see its summary.</p>
+                <p>Select Source workflow(s) to see a summary.</p>
             </div>
 
             <div id="summaryCard" class="summary-card hidden">
-                <div class="summary-repo-name" id="summaryWorkflowName">-</div>
+                <div class="summary-pair-count" id="summaryPairCount">0 source(s) &times; 0 target(s) = 0 import operation(s)</div>
 
-                <div class="summary-stats">
-                    <div class="stat">
-                        <span class="stat-value" id="statStages">0</span>
-                        <span class="stat-label">Stages</span>
+                <div class="focused-source-block">
+                    <div class="focused-source-label">Previewing <span id="focusedSourceName">-</span></div>
+
+                    <div class="summary-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="statStages">0</span>
+                            <span class="stat-label">Stages</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="statTrigger">-</span>
+                            <span class="stat-label">Trigger Method</span>
+                        </div>
+                        <div class="stat stat-wide">
+                            <span class="stat-value" id="statType">-</span>
+                            <span class="stat-label">Workflow Type</span>
+                        </div>
                     </div>
-                    <div class="stat">
-                        <span class="stat-value" id="statTrigger">-</span>
-                        <span class="stat-label">Trigger Method</span>
-                    </div>
-                    <div class="stat stat-wide">
-                        <span class="stat-value" id="statType">-</span>
-                        <span class="stat-label">Workflow Type</span>
-                    </div>
+
+                    <button id="previewBtn" class="btn btn-secondary btn-block" type="button">
+                        Refresh Preview
+                    </button>
                 </div>
-
-                <button id="previewBtn" class="btn btn-secondary btn-block" type="button">
-                    Preview Workflow
-                </button>
             </div>
 
             <div class="transfer-track" aria-hidden="true">
@@ -149,6 +160,19 @@
                     <span class="track-dot" id="trackDot"></span>
                 </div>
                 <span class="track-label">Target</span>
+            </div>
+
+            <div class="pair-picker">
+                <span class="pair-picker-label">Preview pair</span>
+                <div class="pair-picker-selects">
+                    <select id="previewSourceSelect" class="pair-picker-select" aria-label="Source workflow to preview" disabled>
+                        <option value="">&mdash;</option>
+                    </select>
+                    <span class="pair-arrow" aria-hidden="true">&rarr;</span>
+                    <select id="previewTargetSelect" class="pair-picker-select" aria-label="Target workflow to preview" disabled>
+                        <option value="">&mdash;</option>
+                    </select>
+                </div>
             </div>
 
             <button id="generateJsonBtn" class="btn btn-secondary btn-block" type="button" disabled>
@@ -165,16 +189,16 @@
             </div>
 
             <button id="validateBtn" class="btn btn-secondary btn-block" type="button" disabled>
-                Validate Compatibility
+                Validate All Pairs
             </button>
 
             <div id="validationPanel" class="validation-panel hidden">
                 <div id="validationSummary" class="validation-summary"></div>
-                <ul id="validationList" class="validation-list"></ul>
+                <ul id="validationList" class="validation-list pair-validation-list"></ul>
             </div>
 
             <button id="importBtn" class="btn btn-primary btn-block" type="button" disabled>
-                Import Workflow
+                Import All
             </button>
 
             <div id="progressPanel" class="progress-panel hidden">
@@ -185,7 +209,7 @@
         <!-- RIGHT: TARGET WORKFLOW -->
         <section class="panel panel-target" aria-labelledby="targetHeading">
             <div class="panel-head">
-                <h2 id="targetHeading">Target Workflow</h2>
+                <h2 id="targetHeading">Target Workflows</h2>
                 <button id="crossTenantBtn" class="btn btn-ghost" type="button">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
@@ -202,25 +226,27 @@
             </div>
 
             <div class="search-wrap search-wrap-row">
-                <input
-                    type="text"
-                    id="targetSearchInput"
-                    class="search-input"
-                    placeholder="Search by internal name (WFName)..."
-                    autocomplete="off"
-                />
-                <button id="targetSearchBtn" class="btn btn-secondary" type="button">Search</button>
+                <div class="autocomplete-input-wrap">
+                    <input
+                        type="text"
+                        id="targetSearchInput"
+                        class="search-input"
+                        placeholder="Type a workflow name to search..."
+                        autocomplete="off"
+                        role="combobox"
+                        aria-expanded="false"
+                        aria-autocomplete="list"
+                    />
+                    <div id="targetAutocompleteList" class="autocomplete-list hidden" role="listbox" aria-label="Target workflow suggestions"></div>
+                </div>
+                <button id="targetSearchBtn" class="btn btn-secondary" type="button">Add</button>
             </div>
 
             <div id="targetStatus" class="list-status hidden"></div>
 
-            <div id="targetWorkflowContainer" class="repo-list" role="listbox" aria-label="Target workflows">
-                <div class="empty-message">Search for a workflow by its internal name (WFName).</div>
-            </div>
-
-            <div class="selected-target-card">
-                <div class="selected-target-label">Selected Target</div>
-                <div class="selected-target-name" id="selectedTargetName">No target selected</div>
+            <div class="chip-list-label">Selected Targets (<span id="targetCount">0</span>)</div>
+            <div id="targetWorkflowContainer" class="repo-list chip-list" role="listbox" aria-label="Selected target workflows" aria-multiselectable="true">
+                <div class="empty-message">Type a workflow name above to search and pick from the suggestions.</div>
             </div>
         </section>
 
@@ -231,19 +257,12 @@
     <!-- ============================================= -->
     <div id="confirmModal" class="modal-overlay hidden">
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-            <h3 id="confirmTitle">Confirm import</h3>
-            <p class="modal-copy">You are about to overwrite the workflow configuration.</p>
+            <h3 id="confirmTitle">Confirm bulk import</h3>
+            <p class="modal-copy">You are about to overwrite the configuration of every Target workflow listed below.</p>
 
-            <div class="confirm-flow">
-                <div class="confirm-repo">
-                    <span class="confirm-repo-label">Source</span>
-                    <span class="confirm-repo-name" id="confirmSourceName">-</span>
-                </div>
-                <div class="confirm-arrow" aria-hidden="true">&#8594;</div>
-                <div class="confirm-repo">
-                    <span class="confirm-repo-label">Target</span>
-                    <span class="confirm-repo-name" id="confirmTargetName">-</span>
-                </div>
+            <div class="confirm-flow confirm-flow-vertical">
+                <p class="confirm-pair-summary" id="confirmPairSummary">0 import operation(s) will run.</p>
+                <ul class="confirm-pair-list" id="confirmPairList"></ul>
             </div>
 
             <div class="modal-actions">
@@ -259,32 +278,32 @@
     <div id="successModal" class="modal-overlay hidden">
         <div class="modal-card success-card" role="dialog" aria-modal="true" aria-labelledby="successTitle">
             <div class="success-icon" aria-hidden="true">&#9989;</div>
-            <h3 id="successTitle">Workflow imported successfully</h3>
+            <h3 id="successTitle">Workflows imported successfully</h3>
 
-            <div class="confirm-flow confirm-flow-vertical">
-                <div class="confirm-repo">
-                    <span class="confirm-repo-label">Source</span>
-                    <span class="confirm-repo-name" id="successSourceName">-</span>
-                </div>
-                <div class="confirm-arrow" aria-hidden="true">&#8595;</div>
-                <div class="confirm-repo">
-                    <span class="confirm-repo-label">Target</span>
-                    <span class="confirm-repo-name" id="successTargetName">-</span>
-                </div>
-            </div>
-
-            <div class="summary-stats success-stats">
+            <div class="summary-stats success-stats success-stats-wide">
                 <div class="stat">
-                    <span class="stat-value" id="successStages">0</span>
-                    <span class="stat-label">Stages Migrated</span>
+                    <span class="stat-value" id="successPairsTotal">0</span>
+                    <span class="stat-label">Pairs Attempted</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value" id="successTrigger">-</span>
-                    <span class="stat-label">Trigger Method</span>
+                    <span class="stat-value" id="successPairsSucceeded">0</span>
+                    <span class="stat-label">Succeeded</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="successPairsFailed">0</span>
+                    <span class="stat-label">Failed</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="successPairsSkipped">0</span>
+                    <span class="stat-label">Skipped</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="successStagesTotal">0</span>
+                    <span class="stat-label">Total Stages Migrated</span>
                 </div>
                 <div class="stat">
                     <span class="stat-value" id="successTime">0s</span>
-                    <span class="stat-label">Import Time</span>
+                    <span class="stat-label">Total Time</span>
                 </div>
             </div>
 
@@ -294,7 +313,7 @@
             </div>
 
             <button id="importAnotherBtn" class="btn btn-primary btn-block" type="button">
-                Import Another Workflow
+                Start New Import
             </button>
         </div>
     </div>

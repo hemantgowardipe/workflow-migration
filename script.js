@@ -9,6 +9,11 @@ const sourceSearchInput = document.getElementById('sourceSearchInput');
 const targetSearchInput = document.getElementById('targetSearchInput');
 const sourceSearchBtn = document.getElementById('sourceSearchBtn');
 const targetSearchBtn = document.getElementById('targetSearchBtn');
+const sourceAutocompleteList = document.getElementById('sourceAutocompleteList');
+const targetAutocompleteList = document.getElementById('targetAutocompleteList');
+
+const sourceCountEl = document.getElementById('sourceCount');
+const targetCountEl = document.getElementById('targetCount');
 
 const sourceStatus = document.getElementById('sourceStatus');
 const targetStatus = document.getElementById('targetStatus');
@@ -21,9 +26,10 @@ const sourceJsonViewerWrap = document.getElementById('sourceJsonViewerWrap');
 const sourceJsonViewer = document.getElementById('sourceJsonViewer');
 const uploadSourceJsonInput = document.getElementById('uploadSourceJsonInput');
 const uploadedJsonEditorWrap = document.getElementById('uploadedJsonEditorWrap');
+const uploadedJsonEditorLabel = document.getElementById('uploadedJsonEditorLabel');
 const uploadedJsonEditor = document.getElementById('uploadedJsonEditor');
-const useFetchedSourceBtn = document.getElementById('useFetchedSourceBtn');
 const saveUploadedJsonBtn = document.getElementById('saveUploadedJsonBtn');
+const closeUploadedJsonEditorBtn = document.getElementById('closeUploadedJsonEditorBtn');
 
 const validateBtn = document.getElementById('validateBtn');
 const validationPanel = document.getElementById('validationPanel');
@@ -35,7 +41,8 @@ const exportSummaryTextBtn = document.getElementById('exportSummaryTextBtn');
 
 const summaryEmpty = document.getElementById('summaryEmpty');
 const summaryCard = document.getElementById('summaryCard');
-const summaryWorkflowName = document.getElementById('summaryWorkflowName');
+const summaryPairCount = document.getElementById('summaryPairCount');
+const focusedSourceName = document.getElementById('focusedSourceName');
 const statStages = document.getElementById('statStages');
 const statTrigger = document.getElementById('statTrigger');
 const statType = document.getElementById('statType');
@@ -45,6 +52,8 @@ const toggleJsonBtn = document.getElementById('toggleJsonBtn');
 const jsonViewerWrap = document.getElementById('jsonViewerWrap');
 const jsonViewer = document.getElementById('jsonViewer');
 
+const previewSourceSelect = document.getElementById('previewSourceSelect');
+const previewTargetSelect = document.getElementById('previewTargetSelect');
 const generateJsonBtn = document.getElementById('generateJsonBtn');
 
 const importBtn = document.getElementById('importBtn');
@@ -52,8 +61,6 @@ const trackDot = document.getElementById('trackDot');
 
 const progressPanel = document.getElementById('progressPanel');
 const progressList = document.getElementById('progressList');
-
-const selectedTargetName = document.getElementById('selectedTargetName');
 
 const crossTenantBtn = document.getElementById('crossTenantBtn');
 const crossTenantModal = document.getElementById('crossTenantModal');
@@ -68,16 +75,18 @@ const tenantBadgeText = document.getElementById('tenantBadgeText');
 const resetTenantBtn = document.getElementById('resetTenantBtn');
 
 const confirmModal = document.getElementById('confirmModal');
-const confirmSourceName = document.getElementById('confirmSourceName');
-const confirmTargetName = document.getElementById('confirmTargetName');
+const confirmPairSummary = document.getElementById('confirmPairSummary');
+const confirmPairList = document.getElementById('confirmPairList');
 const confirmCancelBtn = document.getElementById('confirmCancelBtn');
 const confirmProceedBtn = document.getElementById('confirmProceedBtn');
 
 const successModal = document.getElementById('successModal');
-const successSourceName = document.getElementById('successSourceName');
-const successTargetName = document.getElementById('successTargetName');
-const successStages = document.getElementById('successStages');
-const successTrigger = document.getElementById('successTrigger');
+const successTitle = document.getElementById('successTitle');
+const successPairsTotal = document.getElementById('successPairsTotal');
+const successPairsSucceeded = document.getElementById('successPairsSucceeded');
+const successPairsFailed = document.getElementById('successPairsFailed');
+const successPairsSkipped = document.getElementById('successPairsSkipped');
+const successStagesTotal = document.getElementById('successStagesTotal');
 const successTime = document.getElementById('successTime');
 const importAnotherBtn = document.getElementById('importAnotherBtn');
 
@@ -91,24 +100,41 @@ const closeGeneratedJsonBtn = document.getElementById('closeGeneratedJsonBtn');
 /* STATE                                          */
 /* ============================================= */
 
-let allWorkflows = [];       // source-side list, always the default/home tenant
-let targetWorkflows = [];    // target-side list; equals allWorkflows unless cross-tenant is active
+let allWorkflows = [];       // source-side directory, always the default/home tenant
+let targetWorkflows = [];    // target-side directory; equals allWorkflows unless cross-tenant is active
 let targetTenant = null;     // null = same tenant as source; otherwise { baseUrl, employeeGUID, hrzEmail, hrzEmpID }
 
-let selectedSourceWorkflow = null;
-let selectedTargetWorkflow = null;
+// Multi-select state. Each Source entry is:
+//   { id, workflow, uploaded, loading }
+//     - id: WFID for a fetched workflow, or a synthetic "uploaded-..." id
+//     - uploaded: true when `workflow` came from an uploaded/edited JSON
+//       file rather than the fetched directory (no WFID guarantee)
+//     - loading: true while the full record is being fetched by WFID after
+//       being picked from the autocomplete list
+// Each Target entry is: { id, workflow } (id === workflow.WFID always,
+// since targets always come from the fetched directory).
+let sourceEntries = [];
+let targetEntries = [];
 
-let previewedSourceWFID = null; // guards against a stale preview being imported/generated
+let focusedSourceId = null;       // which Source chip the center panel / JSON actions act on
+let uploadedEditorLoadedId = null; // which uploaded entry's JSON currently fills the editor textarea
+                                    // (guards against clobbering in-progress edits on unrelated re-renders)
+let uploadCounter = 0;             // used to build unique ids for uploaded sources
 
-let lastGeneratedPayload = null; // the most recently generated migration JSON (for download)
+let sourceAutocompleteMatches = [];
+let targetAutocompleteMatches = [];
+let sourceHighlightIndex = -1;
+let targetHighlightIndex = -1;
 
-let sourceIsUploaded = false; // true when the active source came from an uploaded JSON file, not the fetched list
+// Validation runs across the full Source x Target cross-product at once.
+// `lastValidationPairs` is an array of per-pair results; `lastValidationSignature`
+// is a snapshot of exactly which sources/targets were validated, so the
+// result set can be detected as stale the moment either selection changes.
+let lastValidationPairs = null;
+let lastValidationSignature = null;
 
-let lastValidation = null;          // result of validateWorkflowCompatibility(), or null if stale/not yet run
-let lastValidationSourceKey = null; // snapshot of what was validated, to detect staleness
-let lastValidationTargetKey = null;
-
-let lastMigrationSummary = null; // most recently generated audit report (for export)
+let lastGeneratedPayload = null; // most recently generated single-pair preview JSON (for its own download button)
+let lastBulkSummary = null;      // array of per-pair audit summaries from the most recent bulk import (for export)
 
 /* ============================================= */
 /* INITIALIZATION                                 */
@@ -135,13 +161,22 @@ if (document.readyState === 'loading') {
 
 refreshBtn.addEventListener('click', loadWorkflows);
 
-previewBtn.addEventListener('click', previewSourceWorkflow);
+previewBtn.addEventListener('click', () => {
+    if (!focusedSourceId) {
+        showToast('Select a source workflow chip to preview.', 'error');
+        return;
+    }
+    renderFocusedSourceSummary();
+    showToast('Preview refreshed.', 'success');
+});
+
 toggleJsonBtn.addEventListener('click', toggleJsonViewer);
 
 generateJsonBtn.addEventListener('click', generateAndShowMigrationJson);
 downloadGeneratedJsonBtn.addEventListener('click', () => {
     if (!lastGeneratedPayload) return;
-    const filename = `${workflowDisplayName(selectedTargetWorkflow) || 'workflow'}-migration.json`;
+    const targetEntry = targetEntries.find(e => e.id === previewTargetSelect.value);
+    const filename = `${(targetEntry && workflowDisplayName(targetEntry.workflow)) || 'workflow'}-migration.json`;
     downloadTextFile(JSON.stringify(lastGeneratedPayload, null, 2), filename);
 });
 closeGeneratedJsonBtn.addEventListener('click', () => generatedJsonModal.classList.add('hidden'));
@@ -149,35 +184,37 @@ closeGeneratedJsonBtn.addEventListener('click', () => generatedJsonModal.classLi
 validateBtn.addEventListener('click', runValidation);
 
 exportSummaryJsonBtn.addEventListener('click', () => {
-    if (!lastMigrationSummary) return;
-    const filename = `${lastMigrationSummary.targetWorkflowName || 'workflow'}-migration-summary.json`;
-    downloadTextFile(JSON.stringify(lastMigrationSummary, null, 2), filename);
+    if (!lastBulkSummary) return;
+    const bulk = buildBulkMigrationSummary(lastBulkSummary);
+    downloadTextFile(JSON.stringify(bulk, null, 2), 'workflow-migration-summary.json');
 });
 exportSummaryTextBtn.addEventListener('click', () => {
-    if (!lastMigrationSummary) return;
-    const filename = `${lastMigrationSummary.targetWorkflowName || 'workflow'}-migration-summary.txt`;
-    downloadTextFile(formatMigrationSummaryAsText(lastMigrationSummary), filename);
+    if (!lastBulkSummary) return;
+    const bulk = buildBulkMigrationSummary(lastBulkSummary);
+    downloadTextFile(formatBulkMigrationSummaryAsText(bulk), 'workflow-migration-summary.txt');
 });
 
 downloadSourceJsonBtn.addEventListener('click', () => {
-    if (!selectedSourceWorkflow) {
-        showToast('Select or upload a Source Workflow first.', 'error');
+    const entry = sourceEntries.find(e => e.id === focusedSourceId);
+    if (!entry) {
+        showToast('Select a Source workflow chip first.', 'error');
         return;
     }
-    const filename = `${selectedSourceWorkflow.WFName || 'source-workflow'}.json`;
-    downloadTextFile(JSON.stringify(selectedSourceWorkflow, null, 2), filename);
+    const filename = `${entry.workflow.WFName || 'source-workflow'}.json`;
+    downloadTextFile(JSON.stringify(entry.workflow, null, 2), filename);
 });
 
 viewSourceJsonBtn.addEventListener('click', () => {
-    if (!selectedSourceWorkflow) {
-        showToast('Select or upload a Source Workflow first.', 'error');
+    const entry = sourceEntries.find(e => e.id === focusedSourceId);
+    if (!entry) {
+        showToast('Select a Source workflow chip first.', 'error');
         return;
     }
 
     const isHidden = sourceJsonViewerWrap.classList.contains('hidden');
 
     if (isHidden) {
-        sourceJsonViewer.value = JSON.stringify(selectedSourceWorkflow, null, 2);
+        sourceJsonViewer.value = JSON.stringify(entry.workflow, null, 2);
         sourceJsonViewerWrap.classList.remove('hidden');
         viewSourceJsonBtn.textContent = 'Hide JSON';
         viewSourceJsonBtn.setAttribute('aria-expanded', 'true');
@@ -189,14 +226,16 @@ viewSourceJsonBtn.addEventListener('click', () => {
 });
 
 uploadSourceJsonInput.addEventListener('change', handleSourceJsonUpload);
-useFetchedSourceBtn.addEventListener('click', revertToFetchedSource);
 saveUploadedJsonBtn.addEventListener('click', saveUploadedJsonEdits);
+closeUploadedJsonEditorBtn.addEventListener('click', () => {
+    uploadedJsonEditorWrap.classList.add('hidden');
+});
 
 importBtn.addEventListener('click', openConfirmModal);
 confirmCancelBtn.addEventListener('click', closeConfirmModal);
 confirmProceedBtn.addEventListener('click', () => {
     closeConfirmModal();
-    runImport();
+    runBulkImport();
 });
 
 importAnotherBtn.addEventListener('click', resetForNewImport);
@@ -206,108 +245,217 @@ crossTenantCancelBtn.addEventListener('click', () => crossTenantModal.classList.
 crossTenantSaveBtn.addEventListener('click', saveCrossTenantConfig);
 resetTenantBtn.addEventListener('click', resetCrossTenant);
 
-// Per the search-based Source/Target workflow requirement: we don't show
-// the full workflow list any more. Instead, searching looks up a single
-// workflow by exact Internal Name (WFName) match against whichever list is
-// already loaded in memory (there's no per-workflow "get one" endpoint, see
-// api.js), and only that single match is displayed/loaded.
-sourceSearchBtn.addEventListener('click', searchSourceWorkflow);
+previewSourceSelect.addEventListener('change', () => { lastGeneratedPayload = null; });
+previewTargetSelect.addEventListener('change', () => { lastGeneratedPayload = null; });
+
+/* ============================================= */
+/* AUTOCOMPLETE: SOURCE / TARGET SEARCH FIELDS    */
+/* ============================================= */
+
+// Returns up to 8 workflows from `pool` whose display name or internal
+// WFName contains `term` (case-insensitive), excluding anything whose WFID
+// is already in `excludeIds` - so items already selected drop out of their
+// own suggestion list.
+function getAutocompleteMatches(pool, term, excludeIds) {
+    const q = (term || '').trim().toLowerCase();
+    if (!q) return [];
+
+    return pool
+        .filter(w => w && w.WFID && !excludeIds.has(w.WFID))
+        .filter(w => {
+            const name = workflowDisplayName(w).toLowerCase();
+            const internalName = (w.WFName || '').toLowerCase();
+            return name.includes(q) || internalName.includes(q);
+        })
+        .slice(0, 8);
+}
+
+function currentSourceExcludeIds() {
+    return new Set(sourceEntries.filter(e => !e.uploaded).map(e => e.id));
+}
+
+function currentTargetExcludeIds() {
+    return new Set(targetEntries.map(e => e.id));
+}
+
+sourceSearchInput.addEventListener('input', () => {
+    sourceHighlightIndex = -1;
+    sourceAutocompleteMatches = getAutocompleteMatches(allWorkflows, sourceSearchInput.value, currentSourceExcludeIds());
+    renderAutocompleteDropdown(sourceAutocompleteList, sourceAutocompleteMatches, sourceHighlightIndex);
+});
+
+sourceSearchInput.addEventListener('focus', () => {
+    if (sourceSearchInput.value.trim()) {
+        sourceAutocompleteMatches = getAutocompleteMatches(allWorkflows, sourceSearchInput.value, currentSourceExcludeIds());
+        renderAutocompleteDropdown(sourceAutocompleteList, sourceAutocompleteMatches, sourceHighlightIndex);
+    }
+});
+
 sourceSearchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
         e.preventDefault();
-        searchSourceWorkflow();
+        if (sourceAutocompleteMatches.length === 0) return;
+        sourceHighlightIndex = (sourceHighlightIndex + 1) % sourceAutocompleteMatches.length;
+        renderAutocompleteDropdown(sourceAutocompleteList, sourceAutocompleteMatches, sourceHighlightIndex);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (sourceAutocompleteMatches.length === 0) return;
+        sourceHighlightIndex = (sourceHighlightIndex - 1 + sourceAutocompleteMatches.length) % sourceAutocompleteMatches.length;
+        renderAutocompleteDropdown(sourceAutocompleteList, sourceAutocompleteMatches, sourceHighlightIndex);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        commitSourceAutocompleteSelection();
+    } else if (e.key === 'Escape') {
+        hideAutocompleteDropdown(sourceAutocompleteList);
     }
 });
 
-targetSearchBtn.addEventListener('click', searchTargetWorkflow);
-targetSearchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        searchTargetWorkflow();
+sourceAutocompleteList.addEventListener('click', (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    const match = sourceAutocompleteMatches[Number(item.dataset.index)];
+    if (match) {
+        addSourceWorkflow(match);
+        sourceSearchInput.value = '';
+        sourceSearchInput.focus();
+        hideAutocompleteDropdown(sourceAutocompleteList);
     }
 });
 
-async function searchSourceWorkflow() {
+sourceSearchBtn.addEventListener('click', commitSourceAutocompleteSelection);
+
+function commitSourceAutocompleteSelection() {
+    if (sourceAutocompleteMatches.length > 0) {
+        const index = sourceHighlightIndex >= 0 ? sourceHighlightIndex : 0;
+        const match = sourceAutocompleteMatches[index];
+        if (match) {
+            addSourceWorkflow(match);
+            sourceSearchInput.value = '';
+            hideAutocompleteDropdown(sourceAutocompleteList);
+        }
+        return;
+    }
+
     const term = sourceSearchInput.value.trim();
-
     if (!term) {
-        showToast('Enter an internal name (WFName) to search.', 'error');
+        showToast('Type part of a workflow name to search.', 'error');
         return;
     }
 
-    const match = allWorkflows.find(w => (w.WFName || '').toLowerCase() === term.toLowerCase());
+    const exact = allWorkflows.find(w => (w.WFName || '').toLowerCase() === term.toLowerCase()
+        || workflowDisplayName(w).toLowerCase() === term.toLowerCase());
 
-    if (!match) {
-        renderNoSearchResult(workflowContainer, `No workflow found with internal name "${term}".`);
+    if (!exact) {
+        showToast(`No workflow found matching "${term}".`, 'error');
         return;
     }
 
-    sourceSearchBtn.disabled = true;
-    sourceSearchBtn.textContent = 'Loading...';
-    showSourceListLoading();
-
-    try {
-        // WorkflowConfigList only gets us the WFID for this WFName - fetch
-        // the authoritative single-record JSON via WFConfigByID so the
-        // Source panel reflects the freshest full config, rather than
-        // whatever was cached in the last full-list fetch.
-        const freshWorkflow = await fetchWorkflowById(match.WFID);
-        hideSourceListStatus();
-        onSourceWorkflowSelected(freshWorkflow, { uploaded: false });
-    } catch (error) {
-        console.error(error);
-        hideSourceListStatus();
-        renderNoSearchResult(workflowContainer, `Unable to load workflow "${term}".`);
-        showToast('Unable to load Source Workflow.', 'error');
-    } finally {
-        sourceSearchBtn.disabled = false;
-        sourceSearchBtn.textContent = 'Search';
-    }
+    addSourceWorkflow(exact);
+    sourceSearchInput.value = '';
 }
 
-function searchTargetWorkflow() {
+targetSearchInput.addEventListener('input', () => {
+    targetHighlightIndex = -1;
+    targetAutocompleteMatches = getAutocompleteMatches(targetWorkflows, targetSearchInput.value, currentTargetExcludeIds());
+    renderAutocompleteDropdown(targetAutocompleteList, targetAutocompleteMatches, targetHighlightIndex);
+});
+
+targetSearchInput.addEventListener('focus', () => {
+    if (targetSearchInput.value.trim()) {
+        targetAutocompleteMatches = getAutocompleteMatches(targetWorkflows, targetSearchInput.value, currentTargetExcludeIds());
+        renderAutocompleteDropdown(targetAutocompleteList, targetAutocompleteMatches, targetHighlightIndex);
+    }
+});
+
+targetSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (targetAutocompleteMatches.length === 0) return;
+        targetHighlightIndex = (targetHighlightIndex + 1) % targetAutocompleteMatches.length;
+        renderAutocompleteDropdown(targetAutocompleteList, targetAutocompleteMatches, targetHighlightIndex);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (targetAutocompleteMatches.length === 0) return;
+        targetHighlightIndex = (targetHighlightIndex - 1 + targetAutocompleteMatches.length) % targetAutocompleteMatches.length;
+        renderAutocompleteDropdown(targetAutocompleteList, targetAutocompleteMatches, targetHighlightIndex);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        commitTargetAutocompleteSelection();
+    } else if (e.key === 'Escape') {
+        hideAutocompleteDropdown(targetAutocompleteList);
+    }
+});
+
+targetAutocompleteList.addEventListener('click', (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    const match = targetAutocompleteMatches[Number(item.dataset.index)];
+    if (match) {
+        addTargetWorkflow(match);
+        targetSearchInput.value = '';
+        targetSearchInput.focus();
+        hideAutocompleteDropdown(targetAutocompleteList);
+    }
+});
+
+targetSearchBtn.addEventListener('click', commitTargetAutocompleteSelection);
+
+function commitTargetAutocompleteSelection() {
+    if (targetAutocompleteMatches.length > 0) {
+        const index = targetHighlightIndex >= 0 ? targetHighlightIndex : 0;
+        const match = targetAutocompleteMatches[index];
+        if (match) {
+            addTargetWorkflow(match);
+            targetSearchInput.value = '';
+            hideAutocompleteDropdown(targetAutocompleteList);
+        }
+        return;
+    }
+
     const term = targetSearchInput.value.trim();
-
     if (!term) {
-        showToast('Enter an internal name (WFName) to search.', 'error');
+        showToast('Type part of a workflow name to search.', 'error');
         return;
     }
 
-    const match = targetWorkflows.find(w => (w.WFName || '').toLowerCase() === term.toLowerCase());
+    const exact = targetWorkflows.find(w => (w.WFName || '').toLowerCase() === term.toLowerCase()
+        || workflowDisplayName(w).toLowerCase() === term.toLowerCase());
 
-    if (!match) {
-        renderNoSearchResult(targetWorkflowContainer, `No workflow found with internal name "${term}".`);
+    if (!exact) {
+        showToast(`No workflow found matching "${term}".`, 'error');
         return;
     }
 
-    onTargetWorkflowSelected(match);
+    addTargetWorkflow(exact);
+    targetSearchInput.value = '';
 }
+
+// Clicking outside either autocomplete field/dropdown closes it.
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.autocomplete-input-wrap')) {
+        hideAutocompleteDropdown(sourceAutocompleteList);
+        hideAutocompleteDropdown(targetAutocompleteList);
+    }
+});
 
 /* ============================================= */
 /* LOAD WORKFLOWS (single API call, shared)       */
 /* ============================================= */
 
 // Loads the full workflow directory into memory (allWorkflows/targetWorkflows)
-// so search-by-name can resolve instantly, without ever rendering it as a
-// browsable list - the Source/Target panels only ever show a single
-// search result. Runs automatically on page load and whenever Refresh is
-// clicked, so both paths stay in sync (requirement: auto-refresh on load).
+// so the autocomplete fields can filter instantly, without ever rendering it
+// as a browsable list up front - only matches for whatever's been typed are
+// shown. Runs automatically on page load and whenever Refresh is clicked.
 async function loadWorkflows() {
     showSourceListLoading();
 
     try {
         allWorkflows = await fetchAllWorkflows();
-
         hideSourceListStatus();
-        if (!sourceIsUploaded) {
-            renderNoSearchResult(workflowContainer, 'Search for a workflow by its internal name (WFName), or upload a JSON file.');
-        }
-
     } catch (error) {
         console.error(error);
-        showSourceListError('Unable to load workflows.');
-        renderNoSearchResult(workflowContainer, 'Unable to load the workflow directory.');
-        showToast('Unable to load Source Workflow.', 'error');
+        showSourceListError('Unable to load the workflow directory.');
+        showToast('Unable to load Source workflows.', 'error');
     }
 
     await loadTargetWorkflows();
@@ -326,15 +474,13 @@ async function loadTargetWorkflows() {
             : allWorkflows;
 
         targetStatus.classList.add('hidden');
-        renderNoSearchResult(targetWorkflowContainer, 'Search for a workflow by its internal name (WFName).');
 
     } catch (error) {
         console.error(error);
-        targetStatus.textContent = 'Unable to load Target Workflow.';
+        targetStatus.textContent = 'Unable to load Target workflows.';
         targetStatus.classList.remove('hidden', 'status-loading');
         targetStatus.classList.add('status-error');
-        renderNoSearchResult(targetWorkflowContainer, 'Unable to load the workflow directory.');
-        showToast('Unable to load Target Workflow.', 'error');
+        showToast('Unable to load Target workflows.', 'error');
     }
 }
 
@@ -355,101 +501,143 @@ function hideSourceListStatus() {
 }
 
 /* ============================================= */
-/* SOURCE (LEFT) WORKFLOW SELECTION               */
+/* SOURCE (LEFT) MULTI-SELECT                     */
 /* ============================================= */
 
-function onSourceWorkflowSelected(workflow, options) {
-    const opts = options || {};
+// Adds `workflowStub` (a lightweight entry from the allWorkflows directory,
+// with at least WFID/WFName) to the Source selection, then fetches the
+// authoritative full record via WFConfigByID so the chip reflects the
+// freshest config rather than whatever was cached in the last full-list
+// fetch (mirrors the old single-select searchSourceWorkflow behavior).
+async function addSourceWorkflow(workflowStub) {
+    if (!workflowStub || !workflowStub.WFID) return;
 
-    selectedSourceWorkflow = workflow;
-    sourceIsUploaded = Boolean(opts.uploaded);
+    if (sourceEntries.some(e => !e.uploaded && e.id === workflowStub.WFID)) {
+        showToast('That workflow is already in your Source selection.', 'info');
+        return;
+    }
 
-    // Selecting a new source invalidates any previous preview / generated JSON / validation
-    previewedSourceWFID = null;
-    lastGeneratedPayload = null;
+    const entryId = workflowStub.WFID;
+    const entry = { id: entryId, workflow: workflowStub, uploaded: false, loading: true };
+    sourceEntries.push(entry);
+    focusedSourceId = entryId;
+    renderSourcePanel();
     invalidateValidation();
-    resetTransformedJsonViewer();
+    updateActionAvailability();
 
-    if (sourceIsUploaded) {
-        renderUploadedSourceBadge(workflowContainer, workflow);
-        uploadedJsonEditorWrap.classList.remove('hidden');
-        uploadedJsonEditor.value = JSON.stringify(workflow, null, 2);
-    } else {
-        renderSingleWorkflowResult(workflowContainer, workflow, onSourceWorkflowSelected, true);
+    try {
+        const fresh = await fetchWorkflowById(workflowStub.WFID);
+        entry.workflow = fresh;
+        entry.loading = false;
+    } catch (error) {
+        console.error(error);
+        sourceEntries = sourceEntries.filter(e => e.id !== entryId);
+        if (focusedSourceId === entryId) {
+            focusedSourceId = sourceEntries.length > 0 ? sourceEntries[sourceEntries.length - 1].id : null;
+        }
+        showToast(`Unable to load workflow "${workflowDisplayName(workflowStub)}".`, 'error');
+    }
+
+    renderSourcePanel();
+    invalidateValidation();
+    updateActionAvailability();
+}
+
+function removeSourceEntry(id) {
+    const removed = sourceEntries.find(e => e.id === id);
+    sourceEntries = sourceEntries.filter(e => e.id !== id);
+
+    if (focusedSourceId === id) {
+        focusedSourceId = sourceEntries.length > 0 ? sourceEntries[sourceEntries.length - 1].id : null;
+    }
+    if (uploadedEditorLoadedId === id) {
+        uploadedEditorLoadedId = null;
         uploadedJsonEditorWrap.classList.add('hidden');
     }
 
-    downloadSourceJsonBtn.disabled = false;
-    viewSourceJsonBtn.disabled = false;
-    if (!sourceJsonViewerWrap.classList.contains('hidden')) {
-        sourceJsonViewer.value = JSON.stringify(workflow, null, 2);
+    renderSourcePanel();
+    invalidateValidation();
+    updateActionAvailability();
+
+    if (removed) {
+        showToast(`Removed "${workflowDisplayName(removed.workflow)}" from Source.`, 'info');
+    }
+}
+
+function focusSourceEntry(id) {
+    focusedSourceId = id;
+    renderSourcePanel();
+}
+
+function renderSourcePanel() {
+    renderChipList(workflowContainer, sourceEntries, {
+        onRemove: removeSourceEntry,
+        onFocus: focusSourceEntry,
+        focusedId: focusedSourceId,
+        emptyMessage: 'Type a workflow name above to search, pick from the suggestions, or upload a JSON file.'
+    });
+
+    sourceCountEl.textContent = String(sourceEntries.length);
+
+    const focused = sourceEntries.find(e => e.id === focusedSourceId);
+    const jsonActionsEnabled = Boolean(focused && !focused.loading);
+    downloadSourceJsonBtn.disabled = !jsonActionsEnabled;
+    viewSourceJsonBtn.disabled = !jsonActionsEnabled;
+
+    renderFocusedSourceSummary();
+    renderPairPickers();
+    updateStepTrack();
+}
+
+function renderFocusedSourceSummary() {
+    const loadedSourceCount = sourceEntries.filter(e => !e.loading).length;
+    const pairCount = loadedSourceCount * targetEntries.length;
+    summaryPairCount.textContent = `${sourceEntries.length} source(s) \u00d7 ${targetEntries.length} target(s) = ${pairCount} import operation(s)`;
+
+    const entry = sourceEntries.find(e => e.id === focusedSourceId);
+
+    if (!entry) {
+        summaryEmpty.classList.remove('hidden');
+        summaryCard.classList.add('hidden');
+        uploadedJsonEditorWrap.classList.add('hidden');
+        return;
     }
 
     summaryEmpty.classList.add('hidden');
     summaryCard.classList.remove('hidden');
-    summaryWorkflowName.textContent = workflowDisplayName(workflow);
-    statStages.textContent = '-';
-    statTrigger.textContent = '-';
-    statType.textContent = '-';
 
-    toggleJsonBtn.classList.add('hidden');
-    jsonViewerWrap.classList.add('hidden');
-    jsonViewer.value = '';
-    toggleJsonBtn.setAttribute('aria-expanded', 'false');
-    toggleJsonBtn.textContent = 'Show JSON';
+    focusedSourceName.textContent = entry.loading
+        ? 'Loading\u2026'
+        : workflowDisplayName(entry.workflow);
 
-    previewBtn.disabled = false;
-    previewBtn.textContent = 'Preview Workflow';
-
-    setActiveStep(1, [1]);
-    updateActionAvailability();
-
-    // Requirement: preview loads automatically once a workflow is selected,
-    // with no extra click needed. The Preview button stays available for
-    // manually re-running it (e.g. after editing the uploaded JSON).
-    previewSourceWorkflow();
-}
-
-/* ============================================= */
-/* PREVIEW (summarize source workflow)            */
-/* ============================================= */
-
-// WFConfigByID already returns the full workflow config (StagesConfig
-// included) at search time (see searchSourceWorkflow), so - unlike the
-// repository tool's previewSourceRepository() - there's no separate "get
-// one" API call to make here. This just reads the already-loaded object and
-// updates the UI.
-async function previewSourceWorkflow() {
-    if (!selectedSourceWorkflow) {
-        showToast('Please select a Source Workflow.', 'error');
-        return;
-    }
-
-    previewBtn.disabled = true;
-    previewBtn.textContent = 'Loading...';
-
-    try {
-        const workflow = selectedSourceWorkflow;
-
-        previewedSourceWFID = workflow.WFID;
-
-        const { stageCount, triggerType, workflowType } = summarizeWorkflow(workflow);
-
+    if (entry.loading) {
+        statStages.textContent = '-';
+        statTrigger.textContent = '-';
+        statType.textContent = '-';
+    } else {
+        const { stageCount, triggerType, workflowType } = summarizeWorkflow(entry.workflow);
         statStages.textContent = stageCount;
         statTrigger.textContent = triggerType;
         statType.textContent = workflowType;
+    }
 
-        setActiveStep(2, [1, 2]);
-        updateActionAvailability();
+    if (entry.uploaded) {
+        uploadedJsonEditorWrap.classList.remove('hidden');
+        uploadedJsonEditorLabel.textContent = `Editing: ${workflowDisplayName(entry.workflow)}`;
 
-        showToast('Workflow preview loaded.', 'success');
+        // Only refill the textarea when the FOCUSED entry actually changed -
+        // otherwise an unrelated re-render (e.g. adding a Target) would wipe
+        // out whatever the person is mid-way through typing.
+        if (uploadedEditorLoadedId !== entry.id) {
+            uploadedJsonEditor.value = JSON.stringify(entry.workflow, null, 2);
+            uploadedEditorLoadedId = entry.id;
+        }
+    } else {
+        uploadedJsonEditorWrap.classList.add('hidden');
+    }
 
-    } catch (error) {
-        console.error(error);
-        showToast('Unable to load Source Workflow.', 'error');
-    } finally {
-        previewBtn.disabled = false;
-        previewBtn.textContent = 'Preview Workflow';
+    if (!sourceJsonViewerWrap.classList.contains('hidden') && !entry.loading) {
+        sourceJsonViewer.value = JSON.stringify(entry.workflow, null, 2);
     }
 }
 
@@ -468,26 +656,94 @@ function toggleJsonViewer() {
 }
 
 /* ============================================= */
-/* TARGET (RIGHT) WORKFLOW SELECTION              */
-/* No API call - reuses already loaded dataset    */
+/* TARGET (RIGHT) MULTI-SELECT                    */
+/* No per-item API call - reuses the already      */
+/* loaded target directory (refetched at import)  */
 /* ============================================= */
 
-function onTargetWorkflowSelected(workflow) {
-    selectedTargetWorkflow = workflow;
-    lastGeneratedPayload = null;
+function addTargetWorkflow(workflow) {
+    if (!workflow || !workflow.WFID) return;
+
+    if (targetEntries.some(e => e.id === workflow.WFID)) {
+        showToast('That workflow is already in your Target selection.', 'info');
+        return;
+    }
+
+    targetEntries.push({ id: workflow.WFID, workflow });
+    renderTargetPanel();
     invalidateValidation();
-    resetTransformedJsonViewer();
-
-    renderSingleWorkflowResult(targetWorkflowContainer, workflow, onTargetWorkflowSelected, true);
-
-    selectedTargetName.textContent = workflowDisplayName(workflow);
-
-    setActiveStep(3, [1, 2, 3]);
     updateActionAvailability();
 }
 
+function removeTargetEntry(id) {
+    const removed = targetEntries.find(e => e.id === id);
+    targetEntries = targetEntries.filter(e => e.id !== id);
+
+    renderTargetPanel();
+    invalidateValidation();
+    updateActionAvailability();
+
+    if (removed) {
+        showToast(`Removed "${workflowDisplayName(removed.workflow)}" from Target.`, 'info');
+    }
+}
+
+function renderTargetPanel() {
+    renderChipList(targetWorkflowContainer, targetEntries, {
+        onRemove: removeTargetEntry,
+        emptyMessage: 'Type a workflow name above to search and pick from the suggestions.'
+    });
+
+    targetCountEl.textContent = String(targetEntries.length);
+    renderFocusedSourceSummary();
+    renderPairPickers();
+    updateStepTrack();
+}
+
 /* ============================================= */
-/* UPLOAD JSON AS ALTERNATIVE SOURCE WORKFLOW     */
+/* PREVIEW-PAIR PICKERS (Generate JSON section)   */
+/* ============================================= */
+
+// The "View / Download Generated JSON" action previews exactly one
+// Source -> Target pair at a time (it's a preview of the literal payload,
+// not a bulk operation) - these two <select> elements let the person pick
+// which of their selected pairs to preview, defaulting to keeping whatever
+// was already chosen if it's still in range.
+function renderPairPickers() {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+
+    fillSelect(previewSourceSelect, loadedSources.map(e => ({ id: e.id, label: workflowDisplayName(e.workflow) })));
+    fillSelect(previewTargetSelect, targetEntries.map(e => ({ id: e.id, label: workflowDisplayName(e.workflow) })));
+}
+
+function fillSelect(selectEl, items) {
+    const previousValue = selectEl.value;
+    selectEl.innerHTML = '';
+
+    if (items.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '\u2014';
+        selectEl.appendChild(opt);
+        selectEl.disabled = true;
+        return;
+    }
+
+    selectEl.disabled = false;
+    items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.label;
+        selectEl.appendChild(opt);
+    });
+
+    if (items.some(i => i.id === previousValue)) {
+        selectEl.value = previousValue;
+    }
+}
+
+/* ============================================= */
+/* UPLOAD JSON AS AN ADDITIONAL SOURCE WORKFLOW   */
 /* ============================================= */
 
 function handleSourceJsonUpload(event) {
@@ -511,14 +767,26 @@ function handleSourceJsonUpload(event) {
             return;
         }
 
-        onSourceWorkflowSelected(parsed, { uploaded: true });
-        showToast('Uploaded JSON is now the active Source Workflow.', 'success');
+        const entryId = `uploaded-${Date.now()}-${uploadCounter++}`;
+        sourceEntries.push({ id: entryId, workflow: parsed, uploaded: true, loading: false });
+        focusedSourceId = entryId;
+
+        renderSourcePanel();
+        invalidateValidation();
+        updateActionAvailability();
+        showToast(`"${file.name}" added as a Source workflow.`, 'success');
     };
     reader.onerror = () => showToast('Unable to read that file.', 'error');
     reader.readAsText(file);
 }
 
 function saveUploadedJsonEdits() {
+    const entry = sourceEntries.find(e => e.id === focusedSourceId);
+    if (!entry || !entry.uploaded) {
+        showToast('Select an uploaded Source chip to edit.', 'error');
+        return;
+    }
+
     let parsed;
     try {
         parsed = JSON.parse(uploadedJsonEditor.value);
@@ -532,35 +800,12 @@ function saveUploadedJsonEdits() {
         return;
     }
 
-    onSourceWorkflowSelected(parsed, { uploaded: true });
-    showToast('Uploaded JSON changes saved.', 'success');
-}
+    entry.workflow = parsed;
 
-function revertToFetchedSource() {
-    sourceIsUploaded = false;
-    selectedSourceWorkflow = null;
-    previewedSourceWFID = null;
-    lastGeneratedPayload = null;
+    renderSourcePanel();
     invalidateValidation();
-    resetTransformedJsonViewer();
-
-    uploadedJsonEditorWrap.classList.add('hidden');
-    uploadedJsonEditor.value = '';
-    downloadSourceJsonBtn.disabled = true;
-    viewSourceJsonBtn.disabled = true;
-    sourceJsonViewerWrap.classList.add('hidden');
-    sourceJsonViewer.value = '';
-    viewSourceJsonBtn.textContent = 'View JSON';
-    viewSourceJsonBtn.setAttribute('aria-expanded', 'false');
-    summaryEmpty.classList.remove('hidden');
-    summaryCard.classList.add('hidden');
-
-    renderNoSearchResult(workflowContainer, 'Search for a workflow by its internal name (WFName), or upload a JSON file.');
-    sourceSearchInput.value = '';
-
-    setActiveStep(1);
     updateActionAvailability();
-    showToast('Switched back to the fetched Source Workflow.', 'success');
+    showToast('Uploaded JSON changes saved.', 'success');
 }
 
 /* ============================================= */
@@ -592,13 +837,13 @@ async function saveCrossTenantConfig() {
     const previousTenant = targetTenant;
     targetTenant = { baseUrl, employeeGUID, hrzEmail, hrzEmpID };
 
-    // Switching tenants invalidates any target selection/preview state tied
-    // to the previous tenant's workflows.
-    selectedTargetWorkflow = null;
+    // Switching tenants invalidates every Target selection tied to the
+    // previous tenant's workflows.
+    targetEntries = [];
     lastGeneratedPayload = null;
     invalidateValidation();
     resetTransformedJsonViewer();
-    selectedTargetName.textContent = 'No target selected';
+    renderTargetPanel();
     updateActionAvailability();
 
     try {
@@ -621,11 +866,11 @@ async function saveCrossTenantConfig() {
 
 async function resetCrossTenant() {
     targetTenant = null;
-    selectedTargetWorkflow = null;
+    targetEntries = [];
     lastGeneratedPayload = null;
     invalidateValidation();
     resetTransformedJsonViewer();
-    selectedTargetName.textContent = 'No target selected';
+    renderTargetPanel();
     tenantBadge.classList.add('hidden');
     updateActionAvailability();
 
@@ -634,30 +879,53 @@ async function resetCrossTenant() {
 }
 
 /* ============================================= */
+/* STEP TRACK (decorative progress indicator)     */
+/* ============================================= */
+
+function updateStepTrack() {
+    const hasLoadedSource = sourceEntries.some(e => !e.loading);
+    const hasTarget = targetEntries.length > 0;
+
+    if (!hasLoadedSource) {
+        setActiveStep(1, []);
+    } else if (!hasTarget) {
+        setActiveStep(2, [1]);
+    } else {
+        setActiveStep(3, [1, 2]);
+    }
+}
+
+/* ============================================= */
 /* ACTION AVAILABILITY (Import + Generate JSON)   */
 /* ============================================= */
 
 function isReadyToMigrate() {
-    return Boolean(
-        selectedSourceWorkflow &&
-        selectedTargetWorkflow &&
-        (sourceIsUploaded || previewedSourceWFID === selectedSourceWorkflow.WFID)
-    );
+    return sourceEntries.some(e => !e.loading) && targetEntries.length > 0;
 }
 
-// A validation result is only trustworthy for the exact source/target pair
-// it was run against - if either selection changes afterward, it goes stale.
+// A validation result set is only trustworthy for the exact set of
+// Source/Target ids it was computed against - if either selection changes
+// afterward (add, remove, or edit an uploaded JSON), it goes stale.
+function computeSelectionSignature() {
+    const sourceIds = sourceEntries.filter(e => !e.loading).map(e => e.id).sort().join(',');
+    const targetIds = targetEntries.map(e => e.id).sort().join(',');
+    return `${sourceIds}||${targetIds}`;
+}
+
 function invalidateValidation() {
-    lastValidation = null;
-    lastValidationSourceKey = null;
-    lastValidationTargetKey = null;
+    lastValidationPairs = null;
+    lastValidationSignature = null;
     validationPanel.classList.add('hidden');
     validationList.innerHTML = '';
 }
 
+function validationIsCurrent() {
+    return Boolean(lastValidationPairs) && lastValidationSignature === computeSelectionSignature();
+}
+
 // The inline "Show Transformed JSON" viewer only ever reflects the most
-// recently generated migration payload - collapse and clear it whenever
-// that payload goes stale (new source/target selection, tenant switch, etc).
+// recently generated single-pair preview payload - collapse and clear it
+// whenever that payload goes stale (new selection, tenant switch, etc).
 function resetTransformedJsonViewer() {
     toggleJsonBtn.classList.add('hidden');
     toggleJsonBtn.setAttribute('aria-expanded', 'false');
@@ -666,58 +934,78 @@ function resetTransformedJsonViewer() {
     jsonViewer.value = '';
 }
 
-function validationIsCurrent() {
-    return Boolean(
-        lastValidation &&
-        lastValidationSourceKey === selectedSourceWorkflow &&
-        lastValidationTargetKey === selectedTargetWorkflow
-    );
-}
-
 function updateActionAvailability() {
     const ready = isReadyToMigrate();
     generateJsonBtn.disabled = !ready;
     validateBtn.disabled = !ready;
 
-    const canImport = ready && validationIsCurrent() && lastValidation.errors.length === 0;
+    const canImport = ready
+        && validationIsCurrent()
+        && lastValidationPairs.some(p => p.errors.length === 0);
     importBtn.disabled = !canImport;
 }
 
 /* ============================================= */
-/* COMPATIBILITY VALIDATION (Source -> Target)    */
+/* COMPATIBILITY VALIDATION (Source x Target)     */
 /* ============================================= */
 
+// Runs validateWorkflowPair() across every Source x Target combination
+// currently selected (the full cross-product), so the person can see, pair
+// by pair, which import operations are blocked before committing to a bulk
+// import.
 function runValidation() {
     if (!isReadyToMigrate()) {
-        showToast('Select and preview a source, then select a target, first.', 'error');
+        showToast('Add at least one loaded Source workflow and one Target workflow first.', 'error');
         return;
     }
 
-    lastValidation = validateWorkflowCompatibility(selectedSourceWorkflow, selectedTargetWorkflow);
-    lastValidationSourceKey = selectedSourceWorkflow;
-    lastValidationTargetKey = selectedTargetWorkflow;
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    const pairs = [];
+
+    loadedSources.forEach(sourceEntry => {
+        targetEntries.forEach(targetEntry => {
+            const result = validateWorkflowPair(sourceEntry.workflow, targetEntry.workflow);
+            pairs.push({
+                sourceId: sourceEntry.id,
+                targetId: targetEntry.id,
+                sourceName: workflowDisplayName(sourceEntry.workflow),
+                targetName: workflowDisplayName(targetEntry.workflow),
+                errors: result.errors,
+                warnings: result.warnings,
+                dependencies: result.dependencies
+            });
+        });
+    });
+
+    lastValidationPairs = pairs;
+    lastValidationSignature = computeSelectionSignature();
 
     validationPanel.classList.remove('hidden');
-    renderValidationResults(validationSummary, validationList, lastValidation);
+    renderPairValidationResults(validationSummary, validationList, pairs);
 
-    if (lastValidation.errors.length > 0) {
-        showToast(`Validation found ${lastValidation.errors.length} blocking error(s).`, 'error');
-    } else if (lastValidation.warnings.length > 0) {
-        showToast(`Validation passed with ${lastValidation.warnings.length} warning(s) to review.`, 'info');
+    const blocked = pairs.filter(p => p.errors.length > 0).length;
+    if (blocked > 0) {
+        showToast(`${blocked} of ${pairs.length} pair(s) blocked by validation errors.`, 'error');
     } else {
-        showToast('Validation passed with no issues.', 'success');
+        const withWarnings = pairs.filter(p => p.warnings.length > 0).length;
+        showToast(withWarnings > 0
+            ? `All ${pairs.length} pair(s) passed with ${withWarnings} warning(s) to review.`
+            : `All ${pairs.length} pair(s) passed validation.`, 'success');
     }
 
     updateActionAvailability();
 }
 
 /* ============================================= */
-/* SYSTEM GENERATED JSON (preview + download)     */
+/* SYSTEM GENERATED JSON (single-pair preview)    */
 /* ============================================= */
 
 async function generateAndShowMigrationJson() {
-    if (!isReadyToMigrate()) {
-        showToast('Select and preview a source, then select a target, first.', 'error');
+    const sourceEntry = sourceEntries.find(e => e.id === previewSourceSelect.value);
+    const targetEntry = targetEntries.find(e => e.id === previewTargetSelect.value);
+
+    if (!sourceEntry || sourceEntry.loading || !targetEntry) {
+        showToast('Pick a loaded Source and a Target above to preview a pair.', 'error');
         return;
     }
 
@@ -726,14 +1014,14 @@ async function generateAndShowMigrationJson() {
 
     try {
         const { payload, stageCount, triggerType } = buildWorkflowMigrationPayload(
-            selectedSourceWorkflow,
-            selectedTargetWorkflow
+            sourceEntry.workflow,
+            targetEntry.workflow
         );
 
         lastGeneratedPayload = payload;
 
         generatedJsonViewer.value = JSON.stringify(payload, null, 2);
-        generatedJsonMeta.textContent = `${stageCount} stages \u00b7 ${triggerType} \u00b7 target: ${workflowDisplayName(selectedTargetWorkflow)}`;
+        generatedJsonMeta.textContent = `${stageCount} stages \u00b7 ${triggerType} \u00b7 ${workflowDisplayName(sourceEntry.workflow)} \u2192 ${workflowDisplayName(targetEntry.workflow)}`;
         generatedJsonModal.classList.remove('hidden');
 
         // Keep the inline center-panel viewer (toggleJsonBtn/jsonViewer) in
@@ -755,33 +1043,40 @@ async function generateAndShowMigrationJson() {
 /* ============================================= */
 
 function openConfirmModal() {
-    if (!selectedSourceWorkflow) {
-        showToast('Please select a Source Workflow.', 'error');
-        return;
-    }
-
-    if (!sourceIsUploaded && previewedSourceWFID !== selectedSourceWorkflow.WFID) {
-        showToast('Please preview the source workflow before importing.', 'error');
-        return;
-    }
-
-    if (!selectedTargetWorkflow) {
-        showToast('Please select a Target Workflow.', 'error');
+    if (!isReadyToMigrate()) {
+        showToast('Add at least one loaded Source workflow and one Target workflow first.', 'error');
         return;
     }
 
     if (!validationIsCurrent()) {
-        showToast('Please run Validate Compatibility before importing.', 'error');
+        showToast('Please run Validate All Pairs before importing.', 'error');
         return;
     }
 
-    if (lastValidation.errors.length > 0) {
-        showToast('Resolve the validation errors before importing.', 'error');
+    const importablePairs = lastValidationPairs.filter(p => p.errors.length === 0);
+    const blockedPairs = lastValidationPairs.filter(p => p.errors.length > 0);
+
+    if (importablePairs.length === 0) {
+        showToast('Every pair is blocked by validation errors. Resolve them before importing.', 'error');
         return;
     }
 
-    confirmSourceName.textContent = workflowDisplayName(selectedSourceWorkflow);
-    confirmTargetName.textContent = workflowDisplayName(selectedTargetWorkflow);
+    confirmPairSummary.textContent = blockedPairs.length > 0
+        ? `${importablePairs.length} import operation(s) will run. ${blockedPairs.length} pair(s) are blocked by validation errors and will be skipped.`
+        : `${importablePairs.length} import operation(s) will run.`;
+
+    confirmPairList.innerHTML = '';
+    importablePairs.slice(0, 6).forEach(pair => {
+        const li = document.createElement('li');
+        li.textContent = `${pair.sourceName} \u2192 ${pair.targetName}`;
+        confirmPairList.appendChild(li);
+    });
+    if (importablePairs.length > 6) {
+        const li = document.createElement('li');
+        li.textContent = `\u2026and ${importablePairs.length - 6} more`;
+        confirmPairList.appendChild(li);
+    }
+
     confirmModal.classList.remove('hidden');
 }
 
@@ -790,11 +1085,18 @@ function closeConfirmModal() {
 }
 
 /* ============================================= */
-/* IMPORT / MIGRATION                             */
+/* BULK IMPORT / MIGRATION                        */
 /* ============================================= */
 
-async function runImport() {
-    const startTime = performance.now();
+// Runs one import operation per importable (error-free) pair from the last
+// validation run, sequentially - one at a time, not in parallel - so the
+// per-pair progress list stays easy to follow and so a shared-tenant API
+// with no documented concurrency guarantees isn't hit with a burst of
+// simultaneous writes. Pairs that were blocked by validation errors are
+// listed as "skipped" rather than attempted.
+async function runBulkImport() {
+    const importablePairs = lastValidationPairs.filter(p => p.errors.length === 0);
+    const skippedPairs = lastValidationPairs.filter(p => p.errors.length > 0);
 
     setActiveStep(4, [1, 2, 3]);
     progressPanel.classList.remove('hidden');
@@ -802,118 +1104,154 @@ async function runImport() {
     trackDot.classList.add('traveling');
     importBtn.disabled = true;
     generateJsonBtn.disabled = true;
+    validateBtn.disabled = true;
 
-    const steps = [
-        'Loading Source Workflow...',
-        'Loading Target Workflow...',
-        'Preparing Workflow Configuration...',
-        'Uploading Workflow...',
-        'Completed Successfully'
-    ];
+    const rows = importablePairs.map(pair => ({
+        pair,
+        el: addProgressStep(progressList, `${pair.sourceName} \u2192 ${pair.targetName}`)
+    }));
 
-    const stepEls = steps.map(label => addProgressStep(progressList, label));
+    skippedPairs.forEach(pair => {
+        const el = addProgressStep(progressList, `${pair.sourceName} \u2192 ${pair.targetName} (blocked by validation)`);
+        setStepState(el, 'skipped');
+    });
 
-    try {
-        // Steps 1-2: re-fetch both workflows fresh right before import, even
-        // if a preview already ran, to guarantee the latest data. Now that
-        // WFConfigByID is confirmed (see api.js), both source and target are
-        // re-read directly by WFID instead of pulling the entire
-        // WorkflowConfigList and filtering client-side.
-        //
-        // Exception: an uploaded-JSON source isn't part of any tenant's
-        // records and has no WFID to look up by - the uploaded/edited object
-        // itself is treated as authoritative.
-        setStepState(stepEls[0], 'active');
-        let freshSource;
-        if (sourceIsUploaded) {
-            freshSource = selectedSourceWorkflow;
-        } else {
-            try {
-                freshSource = await fetchWorkflowById(selectedSourceWorkflow.WFID);
-            } catch (fetchError) {
-                throw new Error('Source workflow could not be found on reload.');
-            }
+    const results = [];
+    let succeeded = 0;
+    let failed = 0;
+    let totalStages = 0;
+    const overallStart = performance.now();
+
+    for (const { pair, el } of rows) {
+        const sourceEntry = sourceEntries.find(e => e.id === pair.sourceId);
+        const targetEntry = targetEntries.find(e => e.id === pair.targetId);
+
+        if (!sourceEntry || !targetEntry) {
+            setStepState(el, 'error');
+            failed += 1;
+            results.push(buildMigrationSummary({
+                sourceWorkflow: sourceEntry ? sourceEntry.workflow : null,
+                targetWorkflow: targetEntry ? targetEntry.workflow : null,
+                stageCount: 0,
+                triggerType: 'Unknown',
+                dependencies: pair.dependencies,
+                warnings: pair.warnings,
+                errors: pair.errors,
+                status: 'failed',
+                errorMessage: 'Source or Target selection changed during import.'
+            }));
+            continue;
         }
-        setStepState(stepEls[0], 'done');
 
-        setStepState(stepEls[1], 'active');
-        let freshTarget;
+        setStepState(el, 'active');
+
         try {
-            freshTarget = await fetchWorkflowById(selectedTargetWorkflow.WFID, targetTenant);
-        } catch (fetchError) {
-            throw new Error('Target workflow could not be found on reload.');
+            // Re-fetch both workflows fresh right before their own import,
+            // even though validation already ran, to guarantee the latest
+            // data for that specific pair. An uploaded-JSON source isn't
+            // part of any tenant's records and has no WFID to look up by -
+            // the uploaded/edited object itself is treated as authoritative.
+            const freshSource = sourceEntry.uploaded
+                ? sourceEntry.workflow
+                : await fetchWorkflowById(sourceEntry.workflow.WFID);
+
+            const freshTarget = await fetchWorkflowById(targetEntry.workflow.WFID, targetTenant);
+
+            const { payload, stageCount, triggerType } = buildWorkflowMigrationPayload(freshSource, freshTarget);
+            await updateWorkflow(payload, targetTenant);
+
+            setStepState(el, 'done');
+            succeeded += 1;
+            totalStages += stageCount;
+
+            results.push(buildMigrationSummary({
+                sourceWorkflow: freshSource,
+                targetWorkflow: freshTarget,
+                stageCount,
+                triggerType,
+                dependencies: pair.dependencies,
+                warnings: pair.warnings,
+                errors: pair.errors,
+                status: 'success'
+            }));
+
+        } catch (error) {
+            console.error(error);
+            setStepState(el, 'error');
+            failed += 1;
+
+            results.push(buildMigrationSummary({
+                sourceWorkflow: sourceEntry.workflow,
+                targetWorkflow: targetEntry.workflow,
+                stageCount: 0,
+                triggerType: 'Unknown',
+                dependencies: pair.dependencies,
+                warnings: pair.warnings,
+                errors: pair.errors,
+                status: 'failed',
+                errorMessage: error.message
+            }));
         }
-        setStepState(stepEls[1], 'done');
+    }
 
-        // Step 3: Preparing Workflow Configuration
-        setStepState(stepEls[2], 'active');
-        const { payload, stageCount, triggerType } = buildWorkflowMigrationPayload(freshSource, freshTarget);
-        lastGeneratedPayload = payload;
-        setStepState(stepEls[2], 'done');
+    skippedPairs.forEach(pair => {
+        const sourceEntry = sourceEntries.find(e => e.id === pair.sourceId);
+        const targetEntry = targetEntries.find(e => e.id === pair.targetId);
 
-        // Step 4: Uploading Workflow
-        setStepState(stepEls[3], 'active');
-        await updateWorkflow(payload, targetTenant);
-        setStepState(stepEls[3], 'done');
-
-        // Step 5: Completed Successfully
-        setStepState(stepEls[4], 'done');
-
-        const elapsedSeconds = ((performance.now() - startTime) / 1000).toFixed(1);
-
-        lastMigrationSummary = buildMigrationSummary({
-            sourceWorkflow: freshSource,
-            targetWorkflow: freshTarget,
-            stageCount,
-            triggerType,
-            dependencies: lastValidation ? lastValidation.dependencies : [],
-            warnings: lastValidation ? lastValidation.warnings : [],
-            errors: lastValidation ? lastValidation.errors : [],
-            status: 'success'
-        });
-
-        showSuccessModal({
-            stages: stageCount,
-            trigger: triggerType,
-            timeLabel: `${elapsedSeconds}s`
-        });
-
-    } catch (error) {
-        console.error(error);
-        const activeEl = stepEls.find(el => el.classList.contains('active'));
-        if (activeEl) {
-            setStepState(activeEl, 'error');
-        }
-
-        lastMigrationSummary = buildMigrationSummary({
-            sourceWorkflow: selectedSourceWorkflow,
-            targetWorkflow: selectedTargetWorkflow,
+        results.push(buildMigrationSummary({
+            sourceWorkflow: sourceEntry ? sourceEntry.workflow : null,
+            targetWorkflow: targetEntry ? targetEntry.workflow : null,
             stageCount: 0,
             triggerType: 'Unknown',
-            dependencies: lastValidation ? lastValidation.dependencies : [],
-            warnings: lastValidation ? lastValidation.warnings : [],
-            errors: lastValidation ? lastValidation.errors : [],
-            status: 'failed',
-            errorMessage: error.message
-        });
+            dependencies: pair.dependencies,
+            warnings: pair.warnings,
+            errors: pair.errors,
+            status: 'skipped'
+        }));
+    });
 
-        showToast('Workflow import failed.', 'error');
-        importBtn.disabled = false;
-        generateJsonBtn.disabled = false;
-    } finally {
-        trackDot.classList.remove('traveling');
+    trackDot.classList.remove('traveling');
+    lastBulkSummary = results;
+
+    const elapsedSeconds = ((performance.now() - overallStart) / 1000).toFixed(1);
+
+    if (failed === 0) {
+        showToast(`Bulk import completed: ${succeeded} of ${lastValidationPairs.length} pair(s) imported successfully.`, 'success');
+    } else if (succeeded > 0) {
+        showToast(`Bulk import finished with ${failed} failure(s) out of ${importablePairs.length} attempted.`, 'error');
+    } else {
+        showToast('Bulk import failed for every attempted pair.', 'error');
     }
+
+    showBulkSuccessModal({
+        total: lastValidationPairs.length,
+        succeeded,
+        failed,
+        skipped: skippedPairs.length,
+        totalStages,
+        timeLabel: `${elapsedSeconds}s`
+    });
+
+    importBtn.disabled = false;
+    generateJsonBtn.disabled = false;
+    validateBtn.disabled = false;
+    updateActionAvailability();
 }
 
 /* ============================================= */
 /* SUCCESS MODAL / RESET                          */
 /* ============================================= */
 
-function showSuccessModal({ stages, trigger, timeLabel }) {
-    successSourceName.textContent = workflowDisplayName(selectedSourceWorkflow);
-    successTargetName.textContent = workflowDisplayName(selectedTargetWorkflow);
-    successStages.textContent = stages;
-    successTrigger.textContent = trigger;
+function showBulkSuccessModal({ total, succeeded, failed, skipped, totalStages, timeLabel }) {
+    successTitle.textContent = failed > 0
+        ? 'Bulk import completed with issues'
+        : 'Workflows imported successfully';
+
+    successPairsTotal.textContent = total;
+    successPairsSucceeded.textContent = succeeded;
+    successPairsFailed.textContent = failed;
+    successPairsSkipped.textContent = skipped;
+    successStagesTotal.textContent = totalStages;
     successTime.textContent = timeLabel;
 
     successModal.classList.remove('hidden');
@@ -922,19 +1260,20 @@ function showSuccessModal({ stages, trigger, timeLabel }) {
 function resetForNewImport() {
     successModal.classList.add('hidden');
 
-    selectedSourceWorkflow = null;
-    selectedTargetWorkflow = null;
-    previewedSourceWFID = null;
+    sourceEntries = [];
+    targetEntries = [];
+    focusedSourceId = null;
+    uploadedEditorLoadedId = null;
+
     lastGeneratedPayload = null;
-    lastMigrationSummary = null;
-    sourceIsUploaded = false;
+    lastBulkSummary = null;
     invalidateValidation();
 
     sourceSearchInput.value = '';
     targetSearchInput.value = '';
+    hideAutocompleteDropdown(sourceAutocompleteList);
+    hideAutocompleteDropdown(targetAutocompleteList);
 
-    summaryEmpty.classList.remove('hidden');
-    summaryCard.classList.add('hidden');
     resetTransformedJsonViewer();
 
     uploadedJsonEditorWrap.classList.add('hidden');
@@ -946,8 +1285,6 @@ function resetForNewImport() {
     viewSourceJsonBtn.textContent = 'View JSON';
     viewSourceJsonBtn.setAttribute('aria-expanded', 'false');
 
-    selectedTargetName.textContent = 'No target selected';
-
     progressPanel.classList.add('hidden');
     progressList.innerHTML = '';
 
@@ -956,8 +1293,8 @@ function resetForNewImport() {
     generateJsonBtn.textContent = 'View / Download Generated JSON';
     validateBtn.disabled = true;
 
-    renderNoSearchResult(workflowContainer, 'Search for a workflow by its internal name (WFName), or upload a JSON file.');
-    renderNoSearchResult(targetWorkflowContainer, 'Search for a workflow by its internal name (WFName).');
+    renderSourcePanel();
+    renderTargetPanel();
 
     setActiveStep(1);
 }

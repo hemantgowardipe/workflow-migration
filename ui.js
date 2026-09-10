@@ -53,137 +53,174 @@ function workflowDisplayName(workflow) {
 }
 
 /* ============================================= */
-/* WORKFLOW LIST RENDERING                        */
+/* AUTOCOMPLETE DROPDOWN (Source/Target search)   */
 /* ============================================= */
 
-function renderWorkflowList(containerEl, workflows, selectCallback, selectedWorkflow) {
-    if (workflows.length === 0) {
-        containerEl.innerHTML = '<div class="empty-message">No workflows found.</div>';
+// Renders the type-ahead suggestion list for the Source/Target search
+// inputs. `matches` is a plain array of workflow objects (not yet
+// selected); `activeIndex` (-1 = none) highlights the keyboard-navigated
+// row. Click handling is wired by the caller (script.js), which reads
+// `data-index` back off the clicked row against its own copy of `matches`.
+function renderAutocompleteDropdown(listEl, matches, activeIndex) {
+    if (!matches || matches.length === 0) {
+        listEl.classList.add('hidden');
+        listEl.innerHTML = '';
+        return;
+    }
+
+    listEl.innerHTML = '';
+
+    matches.forEach((workflow, idx) => {
+        const item = document.createElement('div');
+        item.className = 'autocomplete-item' + (idx === activeIndex ? ' active' : '');
+        item.setAttribute('role', 'option');
+        item.dataset.index = String(idx);
+
+        item.innerHTML = `
+            <div class="autocomplete-item-name">${escapeHtml(workflowDisplayName(workflow))}</div>
+            <div class="autocomplete-item-id">${escapeHtml(workflow.WFName || workflow.WFID || '-')}</div>
+        `;
+
+        listEl.appendChild(item);
+    });
+
+    listEl.classList.remove('hidden');
+}
+
+function hideAutocompleteDropdown(listEl) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+}
+
+/* ============================================= */
+/* SELECTED WORKFLOW CHIP LIST (multi-select)     */
+/* ============================================= */
+
+// Renders the list of currently-selected Source or Target workflows as
+// removable "chips". Each entry is { id, workflow, uploaded?, loading? }:
+//   - id: WFID for fetched workflows, or a synthetic "uploaded-..." id
+//   - uploaded: true for a source that came from an uploaded/edited JSON
+//     file rather than the fetched directory
+//   - loading: true while the full record is still being fetched by WFID
+//     after being picked from the autocomplete list
+//
+// `options.focusedId`, when it matches an entry's id, highlights that chip
+// as selected - the focused entry is what the center panel's preview/JSON
+// actions act on.
+function renderChipList(containerEl, entries, options) {
+    const opts = options || {};
+
+    if (!entries || entries.length === 0) {
+        containerEl.innerHTML = `<div class="empty-message">${escapeHtml(opts.emptyMessage || 'No workflows selected.')}</div>`;
         return;
     }
 
     containerEl.innerHTML = '';
 
-    workflows.forEach(workflow => {
+    entries.forEach(entry => {
+        const workflow = entry.workflow || {};
+        const isFocused = opts.focusedId !== undefined && opts.focusedId === entry.id;
+
         const row = document.createElement('div');
-        row.className = 'repo-row';
+        row.className = 'repo-row chip-row' + (isFocused ? ' selected' : '') + (entry.loading ? ' chip-row-loading' : '');
         row.setAttribute('role', 'option');
         row.tabIndex = 0;
+        if (isFocused) row.setAttribute('aria-selected', 'true');
 
-        if (selectedWorkflow && selectedWorkflow.WFID === workflow.WFID) {
-            row.classList.add('selected');
-            row.setAttribute('aria-selected', 'true');
-        }
+        const nameLabel = entry.loading ? 'Loading workflow…' : workflowDisplayName(workflow);
+        const idLabel = entry.loading
+            ? ''
+            : (workflow.WFID || (entry.uploaded ? 'No WFID (uploaded JSON)' : '-'));
 
         row.innerHTML = `
-            <div class="repo-name">${escapeHtml(workflowDisplayName(workflow))}</div>
-            <div class="repo-id">${escapeHtml(workflow.WFID || '-')}</div>
+            <div class="chip-row-main">
+                <div class="repo-name">${escapeHtml(nameLabel)}${entry.uploaded ? ' <span class="uploaded-tag">Uploaded</span>' : ''}</div>
+                <div class="repo-id">${escapeHtml(idLabel)}</div>
+            </div>
+            <button type="button" class="chip-remove-btn" aria-label="Remove ${escapeHtml(nameLabel)}" ${entry.loading ? 'disabled' : ''}>&times;</button>
         `;
 
-        row.addEventListener('click', () => selectCallback(workflow));
-        row.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                selectCallback(workflow);
-            }
-        });
+        if (opts.onFocus && !entry.loading) {
+            const focusRow = () => opts.onFocus(entry.id);
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.chip-remove-btn')) return;
+                focusRow();
+            });
+            row.addEventListener('keydown', (e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.chip-remove-btn')) {
+                    e.preventDefault();
+                    focusRow();
+                }
+            });
+        }
+
+        const removeBtn = row.querySelector('.chip-remove-btn');
+        if (opts.onRemove) {
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                opts.onRemove(entry.id);
+            });
+        }
 
         containerEl.appendChild(row);
     });
-}
-
-// Renders exactly one matched workflow as a result "card" (used by the
-// search-based Source/Target panels instead of showing the full list).
-function renderSingleWorkflowResult(containerEl, workflow, selectCallback, isSelected) {
-    containerEl.innerHTML = '';
-
-    const row = document.createElement('div');
-    row.className = 'repo-row' + (isSelected ? ' selected' : '');
-    row.setAttribute('role', 'option');
-    row.tabIndex = 0;
-    if (isSelected) row.setAttribute('aria-selected', 'true');
-
-    row.innerHTML = `
-        <div class="repo-name">${escapeHtml(workflowDisplayName(workflow))}</div>
-        <div class="repo-id">${escapeHtml(workflow.WFID || '-')}</div>
-    `;
-
-    if (selectCallback) {
-        row.addEventListener('click', () => selectCallback(workflow));
-        row.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                selectCallback(workflow);
-            }
-        });
-    }
-
-    containerEl.appendChild(row);
 }
 
 function renderNoSearchResult(containerEl, message) {
     containerEl.innerHTML = `<div class="empty-message">${escapeHtml(message || 'No workflow found.')}</div>`;
 }
 
-// Small badge shown in the Source panel when the active source came from an
-// uploaded JSON file rather than the fetched environment.
-function renderUploadedSourceBadge(containerEl, workflow) {
-    containerEl.innerHTML = '';
-
-    const row = document.createElement('div');
-    row.className = 'repo-row selected uploaded-source-row';
-    row.innerHTML = `
-        <div class="repo-name">&#128190; ${escapeHtml(workflowDisplayName(workflow))} <span class="uploaded-tag">Uploaded JSON</span></div>
-        <div class="repo-id">${escapeHtml(workflow.WFID || 'no WFID in uploaded file')}</div>
-    `;
-    containerEl.appendChild(row);
-}
-
 /* ============================================= */
-/* VALIDATION RESULTS                             */
+/* PER-PAIR VALIDATION RESULTS (Source x Target)  */
 /* ============================================= */
 
-function renderValidationResults(summaryEl, listEl, validation) {
-    const { errors, warnings } = validation;
-
+// `pairResults` is an array of { sourceName, targetName, errors, warnings }
+// (one entry per Source x Target combination). Renders an overall summary
+// line plus one item per pair, so a person reviewing a large cross-product
+// can see at a glance which pairs are blocked.
+function renderPairValidationResults(summaryEl, listEl, pairResults) {
     listEl.innerHTML = '';
 
-    if (errors.length === 0) {
+    const total = pairResults.length;
+    const blocked = pairResults.filter(p => p.errors.length > 0).length;
+    const withWarnings = pairResults.filter(p => p.errors.length === 0 && p.warnings.length > 0).length;
+
+    if (total === 0) {
+        summaryEl.className = 'validation-summary';
+        summaryEl.textContent = 'Nothing to validate yet.';
+    } else if (blocked === 0) {
         summaryEl.className = 'validation-summary validation-ok';
-        summaryEl.textContent = warnings.length > 0
-            ? `No blocking errors. ${warnings.length} warning(s) to review.`
-            : 'No issues found.';
+        summaryEl.textContent = withWarnings > 0
+            ? `All ${total} pair(s) are importable. ${withWarnings} have warning(s) to review.`
+            : `All ${total} pair(s) passed validation with no issues.`;
     } else {
         summaryEl.className = 'validation-summary validation-blocked';
-        summaryEl.textContent = `${errors.length} error(s) must be resolved before importing.`;
+        summaryEl.textContent = `${blocked} of ${total} pair(s) blocked by errors and will be skipped. ${total - blocked} pair(s) are ready to import.`;
     }
 
-    errors.forEach(err => {
+    pairResults.forEach(pair => {
         const li = document.createElement('li');
-        li.className = 'validation-item validation-error';
-        li.innerHTML = `<span class="validation-tag">Error${err.component ? ' \u00b7 ' + escapeHtml(err.component) : ''}</span><span>${escapeHtml(err.message)}</span>`;
+        const state = pair.errors.length > 0 ? 'validation-error' : (pair.warnings.length > 0 ? 'validation-warning' : 'validation-pass');
+        li.className = `validation-item pair-validation-item ${state}`;
+
+        const badgeText = pair.errors.length > 0
+            ? `${pair.errors.length} error(s)`
+            : (pair.warnings.length > 0 ? `${pair.warnings.length} warning(s)` : 'Ready');
+
+        const detailItems = [
+            ...pair.errors.map(e => ({ tag: 'Error', component: e.component, message: e.message })),
+            ...pair.warnings.map(w => ({ tag: 'Warning', component: w.component, message: w.message }))
+        ];
+
+        li.innerHTML = `
+            <div class="pair-validation-head">
+                <span class="pair-validation-route">${escapeHtml(pair.sourceName)}<span class="pair-arrow" aria-hidden="true">&rarr;</span>${escapeHtml(pair.targetName)}</span>
+                <span class="validation-tag">${escapeHtml(badgeText)}</span>
+            </div>
+            ${detailItems.length > 0 ? `<ul class="pair-validation-details">${detailItems.map(item => `<li>${escapeHtml(item.tag)}${item.component ? ' &middot; ' + escapeHtml(item.component) : ''}: ${escapeHtml(item.message)}</li>`).join('')}</ul>` : ''}
+        `;
+
         listEl.appendChild(li);
-    });
-
-    warnings.forEach(warn => {
-        const li = document.createElement('li');
-        li.className = 'validation-item validation-warning';
-        li.innerHTML = `<span class="validation-tag">Warning${warn.component ? ' \u00b7 ' + escapeHtml(warn.component) : ''}</span><span>${escapeHtml(warn.message)}</span>`;
-        listEl.appendChild(li);
-    });
-}
-
-function filterWorkflows(workflows, searchTerm) {
-    const term = (searchTerm || '').trim().toLowerCase();
-
-    if (!term) {
-        return workflows;
-    }
-
-    return workflows.filter(workflow => {
-        const name = workflowDisplayName(workflow).toLowerCase();
-        const internalName = (workflow.WFName || '').toLowerCase();
-        return name.includes(term) || internalName.includes(term);
     });
 }
 
@@ -219,8 +256,10 @@ function addProgressStep(progressListEl, label) {
     return li;
 }
 
+// States: 'active' (in progress), 'done' (succeeded), 'error' (failed), or
+// 'skipped' (never attempted - e.g. a pair blocked by validation errors).
 function setStepState(el, state) {
-    el.classList.remove('active', 'done', 'error');
+    el.classList.remove('active', 'done', 'error', 'skipped');
     el.classList.add(state);
 
     const marker = el.querySelector('.progress-marker');
@@ -228,6 +267,8 @@ function setStepState(el, state) {
         marker.textContent = '\u2713';
     } else if (state === 'error') {
         marker.textContent = '!';
+    } else if (state === 'skipped') {
+        marker.textContent = '\u2014';
     } else {
         marker.textContent = '';
     }
