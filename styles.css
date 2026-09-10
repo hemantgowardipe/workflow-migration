@@ -262,6 +262,16 @@ button {
     white-space: nowrap;
 }
 
+/* Firefox gives real <button> elements a hidden 1px inner border + 2px
+   padding around their focus outline that a <label> styled to look like a
+   button never gets - left alone, a .btn <button> and a .btn <label>
+   (e.g. the Upload JSON control) render at very slightly different
+   heights even with identical classes/padding. This neutralizes it. */
+button.btn::-moz-focus-inner {
+    border: 0;
+    padding: 0;
+}
+
 .btn:active {
     transform: translateY(1px);
 }
@@ -1336,8 +1346,10 @@ button {
 
 .source-file-actions .btn {
     flex: 1;
+    height: 34px;
+    line-height: 1;
     font-size: 12px;
-    padding: 8px 10px;
+    padding: 0 10px;
 }
 
 .visually-hidden {
