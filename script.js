@@ -115,11 +115,18 @@ let targetHighlightIndex = -1;
 // pair currently turned on in the picker - this is the actual set Import
 // operates on. A Target can only ever be claimed by ONE Source at a time
 // (there's no "multiple Sources overwrite the same Target" use case - the
-// second import would just clobber the first), so nothing here defaults to
-// selected automatically the way the source/target lists do; the person
-// builds the mapping deliberately, either by hand or with the quick actions
-// below (all of which respect the one-Source-per-Target rule).
+// second import would just clobber the first).
+//
+// Most pairs are still built by hand via the Targets checklist, but the
+// FIRST time a given Source/Target combination is ever considered, it's
+// auto-selected if the two share a name (WFName or AppTitle, case-
+// insensitive) and the Target isn't already claimed by a different Source -
+// see syncPairSelection() below. `knownPairKeys` records every combination
+// that's already been through that one-time check, so a person unchecking
+// an auto-matched pair (or leaving a non-matching one unchecked) sticks
+// across later re-renders instead of being re-evaluated every time.
 let selectedPairKeys = new Set();
+let knownPairKeys = new Set();
 
 // State for the master-detail pair picker itself (separate from the
 // left-panel focusedSourceId, which drives JSON view/download/edit) -
@@ -939,8 +946,10 @@ function updateStepTrack() {
 /* PAIR SELECTION: MASTER-DETAIL PICKER           */
 /* A Target can only ever belong to ONE Source at */
 /* a time - there's no "two Sources overwrite the */
-/* same Target" use case, so every quick action    */
-/* and the Targets list itself enforce that rule.  */
+/* same Target" use case, so the Targets list      */
+/* itself enforces that rule. The one exception to */
+/* "everything is a manual checkbox click" is a    */
+/* same-name auto-match - see syncPairSelection(). */
 /* ============================================= */
 
 // Returns { sourceEntry, targetEntry } for every currently-selected,
@@ -961,12 +970,28 @@ function getSelectedPairs() {
     return pairs;
 }
 
+// True if `workflowA` and `workflowB` share a name - compared against both
+// WFName (internal name) and AppTitle (display name) on each side, case-
+// insensitively, since either field might be the one that actually lines up
+// between a Source and a Target.
+function namesMatch(workflowA, workflowB) {
+    const namesA = [workflowA.WFName, workflowA.AppTitle].filter(Boolean).map(n => n.toLowerCase());
+    const namesB = [workflowB.WFName, workflowB.AppTitle].filter(Boolean).map(n => n.toLowerCase());
+
+    if (namesA.length === 0 || namesB.length === 0) return false;
+
+    return namesA.some(name => namesB.includes(name));
+}
+
 // Removes any selected pair whose Source or Target no longer exists, then
-// resolves ownership conflicts: if more than one Source somehow ended up
-// claiming the same Target, only the first (in Source list order) is kept
-// and the rest are dropped, since a Target can only belong to one Source.
-// Returns a Map of targetId -> sourceId for whichever Target owns it (if
-// any) after cleanup, so callers don't have to recompute it separately.
+// auto-selects any brand-new Source/Target combination that shares a name
+// (and whose Target isn't already claimed by a different Source), and
+// finally resolves ownership conflicts: if more than one Source somehow
+// ended up claiming the same Target, only the first (in Source list order)
+// is kept and the rest are dropped, since a Target can only belong to one
+// Source. Returns a Map of targetId -> sourceId for whichever Target owns
+// it (if any) after all of that, so callers don't have to recompute it
+// separately.
 function syncPairSelection() {
     const loadedSources = sourceEntries.filter(e => !e.loading);
     const validKeys = new Set();
@@ -975,10 +1000,44 @@ function syncPairSelection() {
         targetEntries.forEach(t => validKeys.add(pairKey(s.id, t.id)));
     });
 
+    // Drop selection/bookkeeping for anything referencing a Source or
+    // Target that no longer exists.
     Array.from(selectedPairKeys).forEach(key => {
         if (!validKeys.has(key)) {
             selectedPairKeys.delete(key);
         }
+    });
+    Array.from(knownPairKeys).forEach(key => {
+        if (!validKeys.has(key)) {
+            knownPairKeys.delete(key);
+        }
+    });
+
+    // Auto-match: the FIRST time a given Source/Target combination is ever
+    // seen, check whether they share a name and, if so, select the pair
+    // automatically - no checkbox click required. Every combination is only
+    // ever considered once (tracked in knownPairKeys), so a person
+    // unchecking an auto-matched pair - or simply not checking a
+    // non-matching one - is never silently overridden on a later re-render.
+    // Sources are processed in list order, so if two Sources happen to
+    // share a name with the same Target, the first Source in the list wins
+    // and the second is left for manual selection, consistent with the
+    // one-Source-per-Target rule.
+    loadedSources.forEach(s => {
+        targetEntries.forEach(t => {
+            const key = pairKey(s.id, t.id);
+            if (knownPairKeys.has(key)) return;
+            knownPairKeys.add(key);
+
+            if (!namesMatch(s.workflow, t.workflow)) return;
+
+            const alreadyClaimed = loadedSources.some(other => other.id !== s.id
+                && selectedPairKeys.has(pairKey(other.id, t.id)));
+
+            if (!alreadyClaimed) {
+                selectedPairKeys.add(key);
+            }
+        });
     });
 
     const owners = new Map();
@@ -998,7 +1057,7 @@ function syncPairSelection() {
     return owners;
 }
 
-// Read-only helper for the quick actions below: which Targets can `sourceId`
+// Read-only helper for renderPairOverview(): which Targets can `sourceId`
 // currently be paired with - i.e. every Target that either isn't claimed by
 // any Source yet, or is already claimed by `sourceId` itself. Targets owned
 // by a *different* Source are left out entirely.
@@ -1275,6 +1334,7 @@ function resetForNewImport() {
     uploadedEditorLoadedId = null;
 
     selectedPairKeys = new Set();
+    knownPairKeys = new Set();
     pairFocusedSourceId = null;
     pairSourceFilter = '';
     pairTargetFilter = '';

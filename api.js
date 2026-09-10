@@ -122,10 +122,23 @@ async function apiGet(url, tenant) {
             headers: getHeaders(tenant)
         });
     } catch (networkError) {
-        throw new Error('Network error while contacting the server.');
+        // Preserve the browser's own message (e.g. a CORS rejection or DNS
+        // failure) instead of replacing it with a generic string - this is
+        // often the only place that distinguishes "server is unreachable"
+        // from "server rejected the cross-origin request" when debugging a
+        // tenant that isn't working yet.
+        console.error(`Network error calling ${url}:`, networkError);
+        throw new Error(`Network error while contacting the server (${networkError.message}). If this tenant is otherwise reachable, check the browser console for a CORS error.`);
     }
 
     if (!response.ok) {
+        let bodyText = '';
+        try {
+            bodyText = await response.text();
+        } catch (readError) {
+            // Body isn't always present/readable - fine to ignore.
+        }
+        console.error(`Request to ${url} failed (HTTP ${response.status}):`, bodyText);
         throw new Error(`Request failed (HTTP ${response.status}).`);
     }
 
@@ -142,21 +155,61 @@ async function apiPost(url, body, tenant) {
             body: JSON.stringify(body)
         });
     } catch (networkError) {
-        throw new Error('Network error while contacting the server.');
+        console.error(`Network error calling ${url}:`, networkError);
+        throw new Error(`Network error while contacting the server (${networkError.message}). If this tenant is otherwise reachable, check the browser console for a CORS error.`);
     }
 
     if (!response.ok) {
+        let bodyText = '';
+        try {
+            bodyText = await response.text();
+        } catch (readError) {
+            // Body isn't always present/readable - fine to ignore.
+        }
+        console.error(`Request to ${url} failed (HTTP ${response.status}):`, bodyText);
         throw new Error(`Request failed (HTTP ${response.status}).`);
     }
 
     return response.json();
 }
 
+// Some tenants/environments on this platform return WorkflowConfigList as a
+// bare array (the documented shape), but others wrap it in a container key -
+// the exact same inconsistency unwrapSingleWorkflowResponse() below already
+// exists to handle for the single-record endpoint. Without an equivalent
+// here, a wrapped list response looks indistinguishable from "no data"
+// (Array.isArray fails) even though the workflows are sitting right there
+// under e.g. .Result or .Data - which is exactly the shape of failure that
+// would only show up on some tenants and not others.
+function unwrapWorkflowListResponse(response) {
+    if (Array.isArray(response)) {
+        return response;
+    }
+
+    if (response && typeof response === 'object') {
+        for (const key of ['Result', 'result', 'Data', 'data', 'Workflows', 'workflows', 'Items', 'items', 'Records', 'records', 'value', 'Value']) {
+            if (Array.isArray(response[key])) {
+                return response[key];
+            }
+        }
+
+        // Older OData-style envelope: { d: [...] } or { d: { results: [...] } }.
+        if (response.d) {
+            if (Array.isArray(response.d)) return response.d;
+            if (response.d.results && Array.isArray(response.d.results)) return response.d.results;
+        }
+    }
+
+    return null;
+}
+
 async function fetchAllWorkflows(tenant) {
-    const workflows = await apiGet(apiUrl(tenant, GET_ALL_WORKFLOWS_PATH), tenant);
+    const raw = await apiGet(apiUrl(tenant, GET_ALL_WORKFLOWS_PATH), tenant);
+    const workflows = unwrapWorkflowListResponse(raw);
 
     if (!Array.isArray(workflows)) {
-        throw new Error('Invalid workflow response.');
+        console.error('Unexpected WorkflowConfigList response shape - raw payload:', raw);
+        throw new Error('Invalid workflow response (unexpected shape - see browser console for the raw payload).');
     }
 
     return workflows;

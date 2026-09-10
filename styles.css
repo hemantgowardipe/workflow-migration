@@ -257,9 +257,40 @@ button {
     padding: 9px 15px;
     font-size: 13px;
     font-weight: 600;
+    font-family: inherit;
+    line-height: normal;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
     white-space: nowrap;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+/* Real <button> elements carry native OS/browser "control" chrome by
+   default (a platform-specific border, background, and - critically for
+   the mismatch this fixes - extra rendering when :disabled) that a
+   <label> styled to look like a button never gets, even with identical
+   classes/padding. `appearance: none` strips that OS chrome so a .btn
+   <button> (View JSON, Download JSON) renders purely from this
+   stylesheet, matching a .btn <label> (Upload JSON) exactly. */
+button.btn {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+button.btn:disabled {
+    opacity: 1; /* let .btn-ghost/.btn-secondary/.btn-primary's own :disabled rules control the look, not a browser default dimming */
+}
+
+/* Firefox gives real <button> elements a hidden 1px inner border + 2px
+   padding around their focus outline that a <label> styled to look like a
+   button never gets - left alone, a .btn <button> and a .btn <label>
+   (e.g. the Upload JSON control) render at very slightly different
+   heights even with identical classes/padding. This neutralizes it. */
+button.btn::-moz-focus-inner {
+    border: 0;
+    padding: 0;
 }
 
 .btn:active {
@@ -306,9 +337,15 @@ button {
     border: 1px solid var(--color-border-strong);
 }
 
-.btn-ghost:hover {
+.btn-ghost:hover:not(:disabled) {
     background: var(--color-surface-alt);
     color: var(--color-ink);
+}
+
+.btn-ghost:disabled {
+    color: var(--color-ink-faint);
+    border-color: var(--color-border);
+    cursor: not-allowed;
 }
 
 .btn-link {
@@ -849,6 +886,12 @@ button {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--color-ink-faint);
+}
+
+.pair-matrix-hint {
+    font-size: 11px;
+    color: var(--color-ink-faint);
+    font-style: italic;
 }
 
 .pair-master-detail {
