@@ -171,6 +171,88 @@ function renderNoSearchResult(containerEl, message) {
 }
 
 /* ============================================= */
+/* PAIR SELECTION MATRIX (Source x Target grid)   */
+/* ============================================= */
+
+// Every Source x Target combination is a candidate migration pair, but not
+// every one is necessarily wanted - this key identifies one specific
+// combination, shared between script.js (which owns the Set of currently
+// selected keys) and this file (which just renders checkboxes for them).
+function pairKey(sourceId, targetId) {
+    return `${sourceId}::${targetId}`;
+}
+
+// Renders an interactive Source x Target checkbox grid so the person can
+// choose exactly which combinations get validated/imported, rather than
+// being forced into every Source against every Target. `sources` and
+// `targets` are plain { id, workflow } entries (already filtered to loaded
+// ones by the caller); `selectedKeys` is a Set of pairKey(...) strings for
+// the pairs currently turned on.
+//
+// This function only renders markup - it doesn't hold or mutate selection
+// state. The caller wires actual state changes via event delegation on
+// `containerEl`: checkbox changes carry data-source-id/data-target-id, the
+// corner buttons carry data-matrix-action="select-all|select-none", and row
+// headers carry data-toggle-row / column headers carry data-toggle-col so
+// a whole row or column can be flipped at once.
+function renderPairMatrix(containerEl, sources, targets, selectedKeys) {
+    if (sources.length === 0 || targets.length === 0) {
+        containerEl.innerHTML = '<div class="empty-message">Add at least one Source and one Target above to choose pairs.</div>';
+        return;
+    }
+
+    const headerCells = targets.map(t => `
+        <th class="pair-matrix-head-cell" data-toggle-col="${escapeHtml(t.id)}" title="Toggle this whole column">
+            <span class="pair-matrix-head-label">${escapeHtml(workflowDisplayName(t.workflow))}</span>
+        </th>
+    `).join('');
+
+    const bodyRows = sources.map(s => {
+        const cells = targets.map(t => {
+            const checked = selectedKeys.has(pairKey(s.id, t.id));
+            return `
+                <td class="pair-matrix-cell">
+                    <input
+                        type="checkbox"
+                        class="pair-matrix-checkbox"
+                        data-source-id="${escapeHtml(s.id)}"
+                        data-target-id="${escapeHtml(t.id)}"
+                        ${checked ? 'checked' : ''}
+                        aria-label="Import ${escapeHtml(workflowDisplayName(s.workflow))} into ${escapeHtml(workflowDisplayName(t.workflow))}"
+                    />
+                </td>
+            `;
+        }).join('');
+
+        return `
+            <tr>
+                <th class="pair-matrix-head-cell pair-matrix-row-head" data-toggle-row="${escapeHtml(s.id)}" title="Toggle this whole row">
+                    <span class="pair-matrix-head-label">${escapeHtml(workflowDisplayName(s.workflow))}</span>
+                </th>
+                ${cells}
+            </tr>
+        `;
+    }).join('');
+
+    containerEl.innerHTML = `
+        <table class="pair-matrix-table">
+            <thead>
+                <tr>
+                    <th class="pair-matrix-corner">
+                        <button type="button" class="btn-link pair-matrix-corner-btn" data-matrix-action="select-all">All</button>
+                        <button type="button" class="btn-link pair-matrix-corner-btn" data-matrix-action="select-none">None</button>
+                    </th>
+                    ${headerCells}
+                </tr>
+            </thead>
+            <tbody>
+                ${bodyRows}
+            </tbody>
+        </table>
+    `;
+}
+
+/* ============================================= */
 /* PER-PAIR VALIDATION RESULTS (Source x Target)  */
 /* ============================================= */
 

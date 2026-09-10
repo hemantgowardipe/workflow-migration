@@ -42,6 +42,7 @@ const exportSummaryTextBtn = document.getElementById('exportSummaryTextBtn');
 const summaryEmpty = document.getElementById('summaryEmpty');
 const summaryCard = document.getElementById('summaryCard');
 const summaryPairCount = document.getElementById('summaryPairCount');
+const pairMatrixContainer = document.getElementById('pairMatrixContainer');
 const focusedSourceName = document.getElementById('focusedSourceName');
 const statStages = document.getElementById('statStages');
 const statTrigger = document.getElementById('statTrigger');
@@ -126,10 +127,23 @@ let targetAutocompleteMatches = [];
 let sourceHighlightIndex = -1;
 let targetHighlightIndex = -1;
 
-// Validation runs across the full Source x Target cross-product at once.
+// Not every Source x Target combination is necessarily wanted, so the
+// person picks exactly which ones via the pair-selection matrix (a grid of
+// checkboxes) instead of every Source always being forced against every
+// Target. `selectedPairKeys` holds pairKey(sourceId, targetId) for every
+// combination currently turned on - this is the actual set validation and
+// import operate on. `knownPairKeys` tracks every combination the matrix
+// has ever shown the person, purely so a *newly appearing* combination
+// (a fresh Source or Target just added) can default to selected without
+// that same logic re-checking a box the person deliberately unchecked on
+// a later, unrelated re-render.
+let selectedPairKeys = new Set();
+let knownPairKeys = new Set();
+
+// Validation runs across whatever's currently selected in the pair matrix.
 // `lastValidationPairs` is an array of per-pair results; `lastValidationSignature`
-// is a snapshot of exactly which sources/targets were validated, so the
-// result set can be detected as stale the moment either selection changes.
+// is a snapshot of exactly which pairs were validated, so the result set
+// can be detected as stale the moment the selection changes.
 let lastValidationPairs = null;
 let lastValidationSignature = null;
 
@@ -690,14 +704,132 @@ function renderSourcePanel() {
 
     renderFocusedSourceSummary();
     renderPairPickers();
+    renderPairOverview();
     updateStepTrack();
 }
 
-function renderFocusedSourceSummary() {
-    const loadedSourceCount = sourceEntries.filter(e => !e.loading).length;
-    const pairCount = loadedSourceCount * targetEntries.length;
-    summaryPairCount.textContent = `${sourceEntries.length} source(s) \u00d7 ${targetEntries.length} target(s) = ${pairCount} import operation(s)`;
+/* ============================================= */
+/* PAIR SELECTION MATRIX (Source x Target grid)   */
+/* ============================================= */
 
+// Returns { sourceEntry, targetEntry } for every currently-selected,
+// currently-valid pair (i.e. both sides still loaded and present) - the
+// single source of truth used by validation, import, and the pair-count
+// display, instead of anything re-deriving a full cross-product.
+function getSelectedPairs() {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    const pairs = [];
+
+    loadedSources.forEach(s => {
+        targetEntries.forEach(t => {
+            if (selectedPairKeys.has(pairKey(s.id, t.id))) {
+                pairs.push({ sourceEntry: s, targetEntry: t });
+            }
+        });
+    });
+
+    return pairs;
+}
+
+// Keeps selectedPairKeys/knownPairKeys in sync with the current Source and
+// Target selections: any brand-new combination (one that's never been
+// shown in the matrix before) defaults to selected, and any combination
+// whose Source or Target no longer exists is dropped from both sets so it
+// doesn't linger as a stale "selected" pair the person never actually saw.
+// Combinations the person has already seen and deliberately unchecked stay
+// unchecked across unrelated re-renders.
+function syncPairSelection() {
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    const validKeys = new Set();
+
+    loadedSources.forEach(s => {
+        targetEntries.forEach(t => {
+            const key = pairKey(s.id, t.id);
+            validKeys.add(key);
+
+            if (!knownPairKeys.has(key)) {
+                selectedPairKeys.add(key);
+                knownPairKeys.add(key);
+            }
+        });
+    });
+
+    Array.from(knownPairKeys).forEach(key => {
+        if (!validKeys.has(key)) {
+            knownPairKeys.delete(key);
+            selectedPairKeys.delete(key);
+        }
+    });
+}
+
+function renderPairOverview() {
+    syncPairSelection();
+
+    const loadedSources = sourceEntries.filter(e => !e.loading);
+    const possiblePairCount = loadedSources.length * targetEntries.length;
+    const selectedCount = getSelectedPairs().length;
+
+    summaryPairCount.textContent = possiblePairCount === 0
+        ? 'Add Source and Target workflows to begin.'
+        : `${selectedCount} of ${possiblePairCount} possible pair(s) selected for import`;
+
+    renderPairMatrix(pairMatrixContainer, loadedSources, targetEntries, selectedPairKeys);
+}
+
+// Event delegation: individual checkbox toggles, plus the corner
+// All/None buttons and clicking a row/column heading to flip everything in
+// that row/column at once (a "smart" toggle - if the whole row/column is
+// already fully selected, clicking it clears the row/column instead of
+// re-selecting it).
+pairMatrixContainer.addEventListener('change', (e) => {
+    const checkbox = e.target.closest('.pair-matrix-checkbox');
+    if (!checkbox) return;
+
+    const key = pairKey(checkbox.dataset.sourceId, checkbox.dataset.targetId);
+    if (checkbox.checked) {
+        selectedPairKeys.add(key);
+    } else {
+        selectedPairKeys.delete(key);
+    }
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+});
+
+pairMatrixContainer.addEventListener('click', (e) => {
+    const actionBtn = e.target.closest('[data-matrix-action]');
+    const rowHead = e.target.closest('[data-toggle-row]');
+    const colHead = e.target.closest('[data-toggle-col]');
+
+    if (!actionBtn && !rowHead && !colHead) return;
+
+    const loadedSources = sourceEntries.filter(s => !s.loading);
+
+    if (actionBtn) {
+        const turnOn = actionBtn.dataset.matrixAction === 'select-all';
+        loadedSources.forEach(s => targetEntries.forEach(t => {
+            const key = pairKey(s.id, t.id);
+            if (turnOn) selectedPairKeys.add(key); else selectedPairKeys.delete(key);
+        }));
+    } else if (rowHead) {
+        const sourceId = rowHead.dataset.toggleRow;
+        const rowKeys = targetEntries.map(t => pairKey(sourceId, t.id));
+        const allOn = rowKeys.every(k => selectedPairKeys.has(k));
+        rowKeys.forEach(k => (allOn ? selectedPairKeys.delete(k) : selectedPairKeys.add(k)));
+    } else if (colHead) {
+        const targetId = colHead.dataset.toggleCol;
+        const colKeys = loadedSources.map(s => pairKey(s.id, targetId));
+        const allOn = colKeys.every(k => selectedPairKeys.has(k));
+        colKeys.forEach(k => (allOn ? selectedPairKeys.delete(k) : selectedPairKeys.add(k)));
+    }
+
+    invalidateValidation();
+    renderPairOverview();
+    updateActionAvailability();
+});
+
+function renderFocusedSourceSummary() {
     const entry = sourceEntries.find(e => e.id === focusedSourceId);
 
     if (!entry) {
@@ -801,6 +933,7 @@ function renderTargetPanel() {
     targetCountEl.textContent = String(targetEntries.length);
     renderFocusedSourceSummary();
     renderPairPickers();
+    renderPairOverview();
     updateStepTrack();
 }
 
@@ -1004,16 +1137,18 @@ function updateStepTrack() {
 /* ============================================= */
 
 function isReadyToMigrate() {
-    return sourceEntries.some(e => !e.loading) && targetEntries.length > 0;
+    return getSelectedPairs().length > 0;
 }
 
 // A validation result set is only trustworthy for the exact set of
-// Source/Target ids it was computed against - if either selection changes
-// afterward (add, remove, or edit an uploaded JSON), it goes stale.
+// selected pairs it was computed against - if the pair-matrix selection
+// changes afterward (checkbox toggled, or a Source/Target added/removed),
+// it goes stale.
 function computeSelectionSignature() {
-    const sourceIds = sourceEntries.filter(e => !e.loading).map(e => e.id).sort().join(',');
-    const targetIds = targetEntries.map(e => e.id).sort().join(',');
-    return `${sourceIds}||${targetIds}`;
+    return getSelectedPairs()
+        .map(({ sourceEntry, targetEntry }) => pairKey(sourceEntry.id, targetEntry.id))
+        .sort()
+        .join(',');
 }
 
 function invalidateValidation() {
@@ -1038,9 +1173,18 @@ function resetTransformedJsonViewer() {
     jsonViewer.value = '';
 }
 
+// The "Preview pair" / Generate JSON tool inspects any one loaded
+// Source + Target combination, independent of which boxes are checked in
+// the pair matrix - it's a read-only inspection aid, not a migration
+// action - so it only needs *something* on each side to pick from.
+function hasLoadedSourceAndTarget() {
+    return sourceEntries.some(e => !e.loading) && targetEntries.length > 0;
+}
+
 function updateActionAvailability() {
     const ready = isReadyToMigrate();
-    generateJsonBtn.disabled = !ready;
+
+    generateJsonBtn.disabled = !hasLoadedSourceAndTarget();
     validateBtn.disabled = !ready;
 
     const canImport = ready
@@ -1053,32 +1197,27 @@ function updateActionAvailability() {
 /* COMPATIBILITY VALIDATION (Source x Target)     */
 /* ============================================= */
 
-// Runs validateWorkflowPair() across every Source x Target combination
-// currently selected (the full cross-product), so the person can see, pair
-// by pair, which import operations are blocked before committing to a bulk
-// import.
+// Runs validateWorkflowPair() across exactly the pairs currently checked in
+// the pair-selection matrix (not necessarily every Source x Target
+// combination), so the person can see, pair by pair, which of their chosen
+// import operations are blocked before committing to a bulk import.
 function runValidation() {
     if (!isReadyToMigrate()) {
-        showToast('Add at least one loaded Source workflow and one Target workflow first.', 'error');
+        showToast('Check at least one Source \u2192 Target pair in the matrix above first.', 'error');
         return;
     }
 
-    const loadedSources = sourceEntries.filter(e => !e.loading);
-    const pairs = [];
-
-    loadedSources.forEach(sourceEntry => {
-        targetEntries.forEach(targetEntry => {
-            const result = validateWorkflowPair(sourceEntry.workflow, targetEntry.workflow);
-            pairs.push({
-                sourceId: sourceEntry.id,
-                targetId: targetEntry.id,
-                sourceName: workflowDisplayName(sourceEntry.workflow),
-                targetName: workflowDisplayName(targetEntry.workflow),
-                errors: result.errors,
-                warnings: result.warnings,
-                dependencies: result.dependencies
-            });
-        });
+    const pairs = getSelectedPairs().map(({ sourceEntry, targetEntry }) => {
+        const result = validateWorkflowPair(sourceEntry.workflow, targetEntry.workflow);
+        return {
+            sourceId: sourceEntry.id,
+            targetId: targetEntry.id,
+            sourceName: workflowDisplayName(sourceEntry.workflow),
+            targetName: workflowDisplayName(targetEntry.workflow),
+            errors: result.errors,
+            warnings: result.warnings,
+            dependencies: result.dependencies
+        };
     });
 
     lastValidationPairs = pairs;
@@ -1137,7 +1276,7 @@ async function generateAndShowMigrationJson() {
         console.error(error);
         showToast('Unable to generate the migration JSON.', 'error');
     } finally {
-        generateJsonBtn.disabled = !isReadyToMigrate();
+        generateJsonBtn.disabled = !hasLoadedSourceAndTarget();
         generateJsonBtn.textContent = 'View / Download Generated JSON';
     }
 }
@@ -1148,12 +1287,12 @@ async function generateAndShowMigrationJson() {
 
 function openConfirmModal() {
     if (!isReadyToMigrate()) {
-        showToast('Add at least one loaded Source workflow and one Target workflow first.', 'error');
+        showToast('Check at least one Source \u2192 Target pair in the matrix above first.', 'error');
         return;
     }
 
     if (!validationIsCurrent()) {
-        showToast('Please run Validate All Pairs before importing.', 'error');
+        showToast('Please run Validate Selected Pairs before importing.', 'error');
         return;
     }
 
@@ -1368,6 +1507,9 @@ function resetForNewImport() {
     targetEntries = [];
     focusedSourceId = null;
     uploadedEditorLoadedId = null;
+
+    selectedPairKeys = new Set();
+    knownPairKeys = new Set();
 
     lastGeneratedPayload = null;
     lastBulkSummary = null;

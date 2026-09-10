@@ -122,14 +122,24 @@
                 <h2 id="summaryHeading">Workflow Summary</h2>
             </div>
 
+            <div class="summary-pair-count" id="summaryPairCount">Add Source and Target workflows to begin.</div>
+
+            <div class="pair-matrix-section">
+                <div class="pair-matrix-head">
+                    <span class="pair-matrix-title">Select Source &rarr; Target Pairs</span>
+                    <span class="pair-matrix-hint">Click a row/column heading to toggle it all at once.</span>
+                </div>
+                <div id="pairMatrixContainer" class="pair-matrix-container">
+                    <div class="empty-message">Add at least one Source and one Target above to choose pairs.</div>
+                </div>
+            </div>
+
             <div id="summaryEmpty" class="empty-state">
                 <div class="empty-icon" aria-hidden="true">&#128193;</div>
-                <p>Select Source workflow(s) to see a summary.</p>
+                <p>Select a Source workflow chip to preview it here.</p>
             </div>
 
             <div id="summaryCard" class="summary-card hidden">
-                <div class="summary-pair-count" id="summaryPairCount">0 source(s) &times; 0 target(s) = 0 import operation(s)</div>
-
                 <div class="focused-source-block">
                     <div class="focused-source-label">Previewing <span id="focusedSourceName">-</span></div>
 
@@ -163,7 +173,7 @@
             </div>
 
             <div class="pair-picker">
-                <span class="pair-picker-label">Preview pair</span>
+                <span class="pair-picker-label">Preview pair (inspect one combination's JSON)</span>
                 <div class="pair-picker-selects">
                     <select id="previewSourceSelect" class="pair-picker-select" aria-label="Source workflow to preview" disabled>
                         <option value="">&mdash;</option>
@@ -189,7 +199,7 @@
             </div>
 
             <button id="validateBtn" class="btn btn-secondary btn-block" type="button" disabled>
-                Validate All Pairs
+                Validate Selected Pairs
             </button>
 
             <div id="validationPanel" class="validation-panel hidden">
@@ -198,7 +208,7 @@
             </div>
 
             <button id="importBtn" class="btn btn-primary btn-block" type="button" disabled>
-                Import All
+                Import Selected Pairs
             </button>
 
             <div id="progressPanel" class="progress-panel hidden">
