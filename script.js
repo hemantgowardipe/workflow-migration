@@ -771,40 +771,82 @@ function renderTargetPanel() {
 }
 
 /* ============================================= */
-/* UPLOAD JSON AS AN ADDITIONAL SOURCE WORKFLOW   */
+/* UPLOAD JSON AS ADDITIONAL SOURCE WORKFLOW(S)   */
 /* ============================================= */
 
-function handleSourceJsonUpload(event) {
-    const file = event.target.files && event.target.files[0];
-    uploadSourceJsonInput.value = ''; // allow re-uploading the same filename later
+// Reads one File as text, wrapped in a Promise so multiple files can be
+// read one after another with a plain for/await loop instead of nesting
+// FileReader callbacks.
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Unable to read that file.'));
+        reader.readAsText(file);
+    });
+}
 
-    if (!file) return;
+// The file input allows selecting several files at once (see `multiple` on
+// #uploadSourceJsonInput) - each valid one becomes its own Source chip, the
+// same as uploading them one at a time. A problem with any single file
+// (unreadable, invalid JSON, not a single workflow object) only skips that
+// file; it doesn't stop the rest of the batch from being added.
+async function handleSourceJsonUpload(event) {
+    const files = Array.from(event.target.files || []);
+    uploadSourceJsonInput.value = ''; // allow re-uploading the same filename(s) later
 
-    const reader = new FileReader();
-    reader.onload = () => {
+    if (files.length === 0) return;
+
+    let addedCount = 0;
+    let lastAddedFileName = null;
+    const failedNames = [];
+
+    for (const file of files) {
+        let raw;
+        try {
+            raw = await readFileAsText(file);
+        } catch (error) {
+            failedNames.push(`${file.name} (unreadable)`);
+            continue;
+        }
+
         let parsed;
         try {
-            parsed = JSON.parse(reader.result);
+            parsed = JSON.parse(raw);
         } catch (error) {
-            showToast('That file is not valid JSON.', 'error');
-            return;
+            failedNames.push(`${file.name} (invalid JSON)`);
+            continue;
         }
 
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            showToast('Uploaded JSON must be a single workflow object.', 'error');
-            return;
+            failedNames.push(`${file.name} (not a single workflow object)`);
+            continue;
         }
 
         const entryId = `uploaded-${Date.now()}-${uploadCounter++}`;
         sourceEntries.push({ id: entryId, workflow: parsed, uploaded: true, loading: false });
         focusedSourceId = entryId;
+        lastAddedFileName = file.name;
+        addedCount += 1;
+    }
 
-        renderSourcePanel();
-        updateActionAvailability();
-        showToast(`"${file.name}" added as a Source workflow.`, 'success');
-    };
-    reader.onerror = () => showToast('Unable to read that file.', 'error');
-    reader.readAsText(file);
+    renderSourcePanel();
+    updateActionAvailability();
+
+    if (addedCount > 0) {
+        showToast(
+            addedCount === 1
+                ? `"${lastAddedFileName}" added as a Source workflow.`
+                : `${addedCount} file(s) added as Source workflows.`,
+            'success'
+        );
+    }
+
+    if (failedNames.length > 0) {
+        const shown = failedNames.slice(0, 5).join(', ');
+        const suffix = failedNames.length > 5 ? `, and ${failedNames.length - 5} more` : '';
+        showToast(`Skipped ${failedNames.length} file(s): ${shown}${suffix}`, 'error');
+    }
 }
 
 function saveUploadedJsonEdits() {
